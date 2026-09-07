@@ -1,0 +1,40 @@
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Data files (large downloaded TLEs or cached imagery)
+data/*.txt
+data/*.csv
+data/*.json
+!data/.gitkeep
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# VS Code settings
+.vscode/
+
+# WSL / Linux system files
+*.swp
+*.swo
+
+# Streamlit local runtime (generated automatically)
+.streamlit/
+
+# Python package distribution files
+*.egg-info/
+dist/
+build/
+
+# Environment variables
+.env
+
+# Git files
+*.log
