@@ -1,42 +1,56 @@
-# validate_deltav.py
-# Day 3, Part A: Validate Hohmann transfer math
+# Scenario A: Validate Hohmann transfer math
+# This script compares orbit raise costs for two different mission profiles.
 
 from src.deltav import hohmann_transfer, EARTH_RADIUS
 
 # ---------------------------------------------------------------------
-# PRIMARY SHOWCASE SCENARIO: 500 km to 1500 km (1000 km raise)
-# This yields ~0.5 km/s (500 m/s), which makes the Day 4 propulsion 
-# trade-study visually dramatic.
+# Mission A: Indian Smallsat (500 km -> 600 km)
 # ---------------------------------------------------------------------
-altitude_initial = 500.0   # km
-altitude_target = 1500.0   # km
+alt_500 = 500.0
+alt_600 = 600.0
+r1_600 = EARTH_RADIUS + alt_500
+r2_600 = EARTH_RADIUS + alt_600
+dv1_600, dv2_600, total_600 = hohmann_transfer(r1_600, r2_600)
+total_600_m_s = total_600 * 1000.0
 
 # ---------------------------------------------------------------------
-# UNIT TEST (Optional): Uncomment below to test the 500->600 km case.
-# This yields ~0.0547 km/s (55 m/s) and proves the math handles 
-# small maneuvers correctly.
+# Mission B: Ambitious Raise (500 km -> 1500 km)
 # ---------------------------------------------------------------------
-# altitude_initial = 500.0
-# altitude_target = 600.0
+alt_1500 = 1500.0
+r1_1500 = EARTH_RADIUS + alt_500
+r2_1500 = EARTH_RADIUS + alt_1500
+dv1_1500, dv2_1500, total_1500 = hohmann_transfer(r1_1500, r2_1500)
+total_1500_m_s = total_1500 * 1000.0
 
-r1 = EARTH_RADIUS + altitude_initial
-r2 = EARTH_RADIUS + altitude_target
+# ---------------------------------------------------------------------
+# Print Comparison Table
+# ---------------------------------------------------------------------
+print("\n" + "=" * 50)
+print("ORBIT RAISE DELTA-V COMPARISON")
+print("=" * 50)
 
-print(f"\nInitial altitude: {altitude_initial} km")
-print(f"Target altitude: {altitude_target} km")
-print(f"Initial radius (r1): {r1:.1f} km")
-print(f"Target radius (r2): {r2:.1f} km")
+print("\n Mission A (Indian Smallsat):")
+print(f"\n Initial altitude: {alt_500} km")
+print(f"  Target altitude: {alt_600} km")
+print(f"  Burn 1: {dv1_600:.4f} km/s")
+print(f"  Burn 2: {dv2_600:.4f} km/s")
+print(f"  Total delta-v: {total_600:.4f} km/s ({total_600_m_s:.0f} m/s)")
 
-dv1, dv2, total_dv = hohmann_transfer(r1, r2)
+print("\n Mission B (Ambitious Raise):")
+print(f"\n Initial altitude: {alt_500} km")
+print(f"  Target altitude: {alt_1500} km")
+print(f"  Burn 1: {dv1_1500:.4f} km/s")
+print(f"  Burn 2: {dv2_1500:.4f} km/s")
+print(f"  Total delta-v: {total_1500:.4f} km/s ({total_1500_m_s:.0f} m/s)")
 
-print(f"\nBurn 1 (at {altitude_initial:.0f} km): {dv1:.4f} km/s")
-print(f"Burn 2 (at {altitude_target:.0f} km): {dv2:.4f} km/s")
-total_m_s = total_dv * 1000.0
-print(f"Total delta-v: {total_dv:.4f} km/s or {total_m_s:.0f} m/s" )
-
-# Sanity check (now set for the 500->1500 case, ~500 m/s)
-
-if 200 < total_m_s < 800:  # Broadened range to catch both 55m/s and 500m/s cases
-    print("\nSANITY CHECK PASSED: Total delta-v is in the expected range.")
+# Sanity checks
+print("\n" + "-" * 50)
+if 30 < total_600_m_s < 80:
+    print("\n SANITY CHECK PASSED: 500→600 km is in the expected range (~55 m/s).")
 else:
-    print("\nSANITY CHECK FAILED: Check your units.")
+    print("\n SANITY CHECK FAILED: 500→600 km outside expected range.")
+
+if 200 < total_1500_m_s < 800:
+    print("\n SANITY CHECK PASSED: 500→1500 km is in the expected range (~500 m/s).")
+else:
+    print("\n SANITY CHECK FAILED: 500→1500 km outside expected range.")

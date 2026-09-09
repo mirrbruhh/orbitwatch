@@ -56,3 +56,48 @@ def hohmann_transfer(r1, r2):
     total_dv = dv1 + dv2
     
     return dv1, dv2, total_dv
+
+def station_keeping_delta_v(annual_rate_m_s, years):
+    """
+    Compute total station-keeping delta-v over a mission lifetime.
+
+    This is a generic formula. The annual rate depends on the altitude,
+    solar activity, satellite ballistic coefficient, and drag profile.
+    Use published mission data (e.g., SMAD, ESA/NASA reports) to determine
+    the appropriate annual rate for your specific scenario.
+
+    Parameters:
+        annual_rate_m_s (float): Annual delta-v required for station-keeping (m/s).
+        years (float): Mission lifetime in years.
+
+    Returns:
+        float: Total delta-v in km/s.
+    """
+    total_m_s = annual_rate_m_s * years
+    return total_m_s / 1000.0  # Convert to km/s
+
+def deorbit_delta_v(r1, r_perigee):
+    """
+    Compute the retrograde delta-v required to lower the perigee
+    from a circular orbit (radius r1) to a target perigee (r_perigee).
+
+    Parameters:
+        r1 (float): Initial circular orbit radius (km).
+        r_perigee (float): Target perigee radius (km) (must be < r1).
+
+    Returns:
+        float: Retrograde delta-v in km/s (positive value).
+    """
+    # Circular speed at r1
+    v_circular = vis_viva(r1, r1)
+    
+    # Semi-major axis of the deorbit transfer ellipse
+    a_transfer = (r1 + r_perigee) / 2.0
+    
+    # Speed on the transfer ellipse at r1 (which is the apogee of the ellipse)
+    v_transfer = vis_viva(r1, a_transfer)
+    
+    # Retrograde burn: slow down
+    dv = v_circular - v_transfer
+    
+    return dv
