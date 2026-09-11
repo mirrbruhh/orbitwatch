@@ -25,7 +25,7 @@ M0_KG = 1000.0  # kg
 
 # Mission profiles: (Name, Total_Delta_V_m_s, Alt1_km, Alt2_km)
 MISSIONS = [
-    ("Mission A (Indian Smallsat: 500 → 600 km)", 190.0, 500.0, 600.0),
+    ("Mission A (Indian Smallsat: 500 → 600 km)", 217.0, 500.0, 600.0),
     ("Mission B (Ambitious High Raise: 500 → 1500 km)", 840.0, 500.0, 1500.0),
     ("Mission C (Rideshare Lowering: 800 → 500 km)", 296.0, 800.0, 500.0),
 ]

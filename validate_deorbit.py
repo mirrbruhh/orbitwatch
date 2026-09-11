@@ -9,7 +9,7 @@ r_perigee = EARTH_RADIUS + ALT_PERIGEE
 
 # Mission definitions: (Name, Initial_Alt_km, Nominal_Target_m_s, Min_Bound, Max_Bound)
 MISSIONS = [
-    ("Mission A (Indian Smallsat)", 500.0, 100.0, 80.0, 120.0),
+   ("Mission A (Indian Smallsat)", 600.0, 127.0, 110.0, 145.0), # Mission A raises to 600 km, so end-of-life disposal is budgeted from there.
     ("Mission B (Ambitious High Raise)", 1500.0, 340.0, 300.0, 380.0),
     ("Mission C (Rideshare Lowering)", 500.0, 100.0, 80.0, 120.0),  # Deorbits from 500 km working orbit
 ]
