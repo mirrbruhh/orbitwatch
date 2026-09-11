@@ -31,7 +31,7 @@ for name, alt1, alt2, m_type, nominal, min_exp, max_exp in MISSIONS:
     
     # Save verification status for the summary block
     is_passed = min_exp <= total_m_s <= max_exp
-    results.append((name, traj_str, total_m_s, is_passed, nominal))  # <--- Clean and explicit!
+    results.append((name, traj_str, total_m_s, is_passed, nominal))
 
 print("-" * 110)
 

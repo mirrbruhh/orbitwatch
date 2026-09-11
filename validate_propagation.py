@@ -1,10 +1,20 @@
 import os
 from skyfield.api import load, EarthSatellite
 from src.propagate import propagate
+from fetch_tle import fetch_and_cache_tle
+import time
 
 DATA_FILE = "data/iss.txt"
-if not os.path.exists(DATA_FILE):
-    raise FileNotFoundError("Run fetch_tle.py first to cache satellite orbital elements.")
+MAX_TLE_AGE_SECONDS = 24 * 3600  # TLE accuracy degrades within days; refreshing it at least daily
+
+# SMART FALLBACK: If the file doesn't exist/or is older than 24 hours, fetch it once automatically!
+needs_fetch = (
+    not os.path.exists(DATA_FILE)
+    or (time.time() - os.path.getmtime(DATA_FILE)) > MAX_TLE_AGE_SECONDS
+)
+if needs_fetch:
+    print("No cached TLE found (or it's stale). Downloading from CelesTrak...")
+    fetch_and_cache_tle()
 
 with open(DATA_FILE, "r", encoding="utf-8") as f:
     lines = [line.strip() for line in f if line.strip()]

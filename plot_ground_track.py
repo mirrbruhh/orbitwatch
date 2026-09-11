@@ -5,12 +5,18 @@ import matplotlib.pyplot as plt
 from skyfield.api import load, EarthSatellite
 from src.coverage import compute_ground_track
 from fetch_tle import fetch_and_cache_tle  # Reusing your ingestion module!
+import time
 
 DATA_FILE = "data/iss.txt"
+MAX_TLE_AGE_SECONDS = 24 * 3600  # TLE accuracy degrades within days; refreshing it at least daily
 
-# SMART FALLBACK: If the file doesn't exist, fetch it once automatically!
-if not os.path.exists(DATA_FILE):
-    print("No cached TLE found. Downloading from CelesTrak...")
+# SMART FALLBACK: If the file doesn't exist/or is older than 24 hours, fetch it once automatically!
+needs_fetch = (
+    not os.path.exists(DATA_FILE)
+    or (time.time() - os.path.getmtime(DATA_FILE)) > MAX_TLE_AGE_SECONDS
+)
+if needs_fetch:
+    print("No cached TLE found (or it's stale). Downloading from CelesTrak...")
     fetch_and_cache_tle()
 
 # Now read the clean local cache
