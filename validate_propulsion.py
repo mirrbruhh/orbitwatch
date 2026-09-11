@@ -1,6 +1,6 @@
 # Module 4: Validate propulsion trade-study calculations across mission profiles
 
-from src.propulsion import propellant_mass, transfer_time_estimate, exhaust_velocity
+from src.propulsion import propellant_mass, transfer_time_estimate, exhaust_velocity, thrust_from_power
 from src.deltav import hohmann_coast_time, EARTH_RADIUS
 
 def format_duration(seconds):
@@ -33,9 +33,9 @@ MISSIONS = [
 # Thruster specifications: (Name, Isp_s, Efficiency, Power_W, Thrust_N, Mode)
 THRUSTERS = [
     ("Chemical Bipropellant", 300, 0.95, 0.0, 500.0, "Chemical"),
-    ("Hall Thruster", 1800, 0.55, 3000.0, 0.5, "Electric"),
-    ("Ion Thruster", 3000, 0.70, 5000.0, 0.2, "Electric"),
-    ("Water Microwave Plasma", 1200, 0.45, 1500.0, 0.1, "Electric"),  # Bellatrix spec
+    ("Hall Thruster", 1800, 0.50, 3000.0, None, "Electric"),
+    ("Ion Thruster", 3000, 0.70, 5000.0, None, "Electric"),
+    ("Water Microwave Plasma", 1200, 0.45, 1500.0, None, "Electric"),  # Isp per Bellatrix's public 4x-chemical-Isp claim
 ]
 
 print("\n" + "=" * 105)
@@ -56,6 +56,9 @@ for mission_name, dv_total, alt1, alt2 in MISSIONS:
     for name, isp, eta, power, thrust, mode in THRUSTERS:
         v_e = exhaust_velocity(isp)  # Now actively used in the table!
         mp = propellant_mass(dv_total, isp, M0_KG)
+        if mode == "Electric":
+            thrust = thrust_from_power(power, eta, v_e)
+        burn_s = transfer_time_estimate(dv_total, thrust, M0_KG)
         burn_s = transfer_time_estimate(dv_total, thrust, M0_KG)
         burn_str = format_duration(burn_s)
         
