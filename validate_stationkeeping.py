@@ -11,7 +11,7 @@ YEARS = 5.0
 # Source: SMAD (Space Mission Analysis and Design, 4th Edition, Chapter 8)
 MISSIONS = [
     ("Mission A (Indian Smallsat)", 500.0, 7.0, 35.0, 20.0, 50.0),
-    ("Mission B (Ambitious High Raise)", 1500.0, 0.0, 0.0, 0.0, 1.0),
+    ("Mission B (Ambitious High Raise)", 1500.0, 0.1, 0.5, 0.0, 0.5), # Not exactly zero: 0.1 m/s/yr is a conservative upper bound at 1500 km
     ("Mission C (Rideshare Lowering)", 500.0, 7.0, 35.0, 20.0, 50.0),  # Operates at 500 km after lowering
 ]
 
@@ -45,8 +45,8 @@ print("\nSANITY CHECK VERIFICATION:")
 for name, alt_str, dv_m_s, is_passed, nominal in results:
     if is_passed:
         tag = "[PASS]"
-        if nominal == 0.0:
-            msg = f"{dv_m_s:.2f} m/s is negligible at {alt_str} (0 m/s)"
+        if nominal < 1.0:
+            msg = f"{dv_m_s:.2f} m/s is negligible at {alt_str} (~{nominal:.1f} m/s)"
         else:
             msg = f"{dv_m_s:.2f} m/s is within nominal drag range (~{nominal:.0f} m/s)"
     else:
@@ -58,5 +58,5 @@ for name, alt_str, dv_m_s, is_passed, nominal in results:
 print("\nSYSTEMS ENGINEERING NOTE:")
 print("  • At 500 km (Missions A & C), atmospheric density (~2e-12 kg/m³) requires ~7 m/s/yr to fight drag.")
 print("  • At 800 km (Mission C drop point), drag is negligible (<0.5 m/s/yr). Lowering to 500 km incurs drag.")
-print("  • At 1500 km (Mission B), density drops to ~1e-14 kg/m³, making lifetime drag effectively zero.")
+print("  • At 1500 km (Mission B), density drops to ~1e-14 kg/m³, making lifetime drag ~0.5 m/s.")
 print("=" * 110)
