@@ -1,7 +1,14 @@
 # Module 4: Validate propulsion trade-study calculations across mission profiles
 
 from src.propulsion import propellant_mass, transfer_time_estimate, exhaust_velocity, thrust_from_power
-from src.deltav import hohmann_coast_time, EARTH_RADIUS
+from src.deltav import (
+    hohmann_transfer,
+    hohmann_coast_time,
+    station_keeping_delta_v,
+    deorbit_delta_v,
+    EARTH_RADIUS,
+)
+from src.missions import MISSIONS
 
 def format_duration(seconds):
     """Format seconds into compact human-readable durations."""
@@ -22,13 +29,18 @@ def format_duration(seconds):
 
 # Baseline satellite wet mass
 M0_KG = 1000.0  # kg
+LIFETIME_YEARS = 5.0
+PERIGEE_ALT_KM = 150.0
 
-# Mission profiles: (Name, Total_Delta_V_m_s, Alt1_km, Alt2_km)
-MISSIONS = [
-    ("Mission A (Indian Smallsat: 500 → 600 km)", 217.0, 500.0, 600.0),
-    ("Mission B (Ambitious High Raise: 500 → 1500 km)", 840.0, 500.0, 1500.0),
-    ("Mission C (Rideshare Lowering: 800 → 500 km)", 296.0, 800.0, 500.0),
-]
+def mission_total_delta_v(alt1, alt2, annual_rate_m_s):
+    """Raise/lower + lifetime station-keeping + deorbit from the final altitude."""
+    r1 = EARTH_RADIUS + alt1
+    r2 = EARTH_RADIUS + alt2
+    _, _, raise_dv = hohmann_transfer(r1, r2)
+    sk_dv = station_keeping_delta_v(annual_rate_m_s, LIFETIME_YEARS)
+    r_perigee = EARTH_RADIUS + PERIGEE_ALT_KM
+    deorbit_dv = deorbit_delta_v(r2, r_perigee)
+    return (raise_dv + sk_dv + deorbit_dv) * 1000.0
 
 # Thruster specifications: (Name, Isp_s, Efficiency, Power_W, Thrust_N, Mode)
 THRUSTERS = [
@@ -42,9 +54,11 @@ print("\n" + "=" * 105)
 print(f"{'PROPULSION TRADE STUDY: MISSION COMPARISON':^105}")
 print("=" * 105)
 
-for mission_name, dv_total, alt1, alt2 in MISSIONS:
+for mission_name, params in MISSIONS.items():
+    alt1, alt2 = params["alt1"], params["alt2"]
     r1 = EARTH_RADIUS + alt1
     r2 = EARTH_RADIUS + alt2
+    dv_total = mission_total_delta_v(alt1, alt2, params["annual_rate"])
     coast_s = hohmann_coast_time(r1, r2)
     coast_str = format_duration(coast_s)
     
@@ -58,7 +72,6 @@ for mission_name, dv_total, alt1, alt2 in MISSIONS:
         mp = propellant_mass(dv_total, isp, M0_KG)
         if mode == "Electric":
             thrust = thrust_from_power(power, eta, v_e)
-        burn_s = transfer_time_estimate(dv_total, thrust, M0_KG)
         burn_s = transfer_time_estimate(dv_total, thrust, M0_KG)
         burn_str = format_duration(burn_s)
         

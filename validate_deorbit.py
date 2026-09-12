@@ -1,18 +1,21 @@
 # Scenario C: Validate deorbit delta-v calculations across mission profiles
 
 from src.deltav import deorbit_delta_v, EARTH_RADIUS
+from src.missions import MISSIONS
 
 # 150 km target perigee dips the spacecraft into Earth's dense upper atmosphere,
 # where aerodynamic drag guarantees rapid, passive re-entry and destruction.
 ALT_PERIGEE = 150.0
 r_perigee = EARTH_RADIUS + ALT_PERIGEE
 
-# Mission definitions: (Name, Initial_Alt_km, Nominal_Target_m_s, Min_Bound, Max_Bound)
-MISSIONS = [
-   ("Mission A (Indian Smallsat)", 600.0, 127.0, 110.0, 145.0), # Mission A raises to 600 km, so end-of-life disposal is budgeted from there.
-    ("Mission B (Ambitious High Raise)", 1500.0, 340.0, 300.0, 380.0),
-    ("Mission C (Rideshare Lowering)", 500.0, 100.0, 80.0, 120.0),  # Deorbits from 500 km working orbit
-]
+# Sanity-check bounds specific to deorbit: name -> (Nominal_m_s, Min_Bound, Max_Bound)
+# All three deorbit from alt2 in src/missions.py, i.e. wherever the mission
+# actually ends up operating, not its starting altitude.
+DEORBIT_BOUNDS = {
+    "Mission A (Indian Smallsat)": (127.0, 110.0, 145.0),
+    "Mission B (Ambitious High Raise)": (340.0, 300.0, 380.0),
+    "Mission C (Rideshare Lowering)": (100.0, 80.0, 120.0),
+}
 
 print("\n" + "=" * 110)
 print(f"{'DEORBIT DELTA-V COMPARISON (PERIGEE = 150 KM)':^105}")
@@ -22,7 +25,9 @@ print("-" * 110)
 
 results = []
 
-for name, alt_init, nominal, min_bound, max_bound in MISSIONS:
+for name, params in MISSIONS.items():
+    nominal, min_bound, max_bound = DEORBIT_BOUNDS[name]
+    alt_init = params["alt2"]
     r1 = EARTH_RADIUS + alt_init
     dv_km_s = deorbit_delta_v(r1, r_perigee)
     dv_m_s = dv_km_s * 1000.0
