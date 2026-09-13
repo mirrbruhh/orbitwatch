@@ -16,6 +16,9 @@ def format_duration(seconds):
     if seconds == float('inf'):
         return "N/A"
         
+    if 0 < seconds < 60:
+        return "< 1m"  # Catches rapid chemical burns so they don't show as 0m
+        
     total_s = int(round(seconds))
     days, remainder = divmod(total_s, 86400)
     hours, remainder = divmod(remainder, 3600)
@@ -87,6 +90,7 @@ for mission_name, params in MISSIONS.items():
         m_current -= mp_deorbit
         
         total_mp = mp_raise + mp_sk + mp_deorbit
+        total_transit_time = t_raise + t_deorbit # Active transit time (excluding 5-year operational SK time)
         
         print(f"   {name.upper()} (Isp: {isp}s)")
         print(f"     {'Phase':<16} | {'ΔV (m/s)':<10} | {'Prop Used (kg)':<15} | {'Mass Remaining':<16} | {'Active/Coast Time'}")
@@ -95,7 +99,10 @@ for mission_name, params in MISSIONS.items():
         print(f"     {'Station-Keeping':<16} | {sk_dv:<10.1f} | {mp_sk:<15.2f} | {m_current + mp_deorbit:<16.2f} | {format_duration(t_sk)} (Accumulated)")
         print(f"     {'Deorbit':<16} | {deorbit_dv:<10.1f} | {mp_deorbit:<15.2f} | {m_current:<16.2f} | {format_duration(t_deorbit)}")
         print(f"     {'-'*81}")
-        print(f"     {'TOTAL / DRY MASS':<16} | {total_dv:<10.1f} | {total_mp:<15.2f} | {m_current:<16.2f} |\n")
+        print(f"     {'DRY MASS':<16} | {'-':<10} | {'-':<15} | {m_current:<16.2f} |")
+        
+        # --- NEW EXPLICIT SUMMARY LINE ---
+        print(f"\n     >> SUMMARY: Total ΔV - {total_dv:.1f} m/s | Propellant Used - {total_mp:.2f} kg | Active Transit Time - {format_duration(total_transit_time)} \n")
 
 # --- First Principles Physics Check Below ---
 q = 1.602e-19        
@@ -115,4 +122,17 @@ if 3000 <= isp_calc <= 4500:
     print("  Benchmark Status:                [PASS] Validates high Isp (>3000s) regime.")
 else:
     print("  Benchmark Status:                [FAIL] Outside expected ion propulsion regime.")
+print("=" * 90)
+
+print("\n" + "=" * 90)
+print(f"{'SYSTEMS ENGINEERING ASSUMPTIONS & SOURCES':^90}")
+print("=" * 90)
+print("  • Drag Profile: Station-keeping relies on SMAD 4th Ed. (e.g., ~7 m/s/yr for 500 km).")
+print("  • Deorbit: Target perigee of 150 km ensures rapid passive aerodynamic destruction.")
+print("  • Microwave Plasma: 1200s Isp based on Bellatrix Aerospace 'JAL' targets (~4x chemical).")
+print("  • Gravity Losses: Continuous LEO burns are a mathematical approximation here. Real")
+print("    missions (e.g., ISRO's Mangalyaan / MOM) use multiple short perigee bursts over")
+print("    several orbits to remain efficient and avoid fighting gravity.")
+print("  • Chemical Firing Times: Displays as '< 1m' because 500 N of thrust achieves ")
+print("    station-keeping Delta-V in roughly ~20 seconds, unlike electric spirals.")
 print("=" * 90)

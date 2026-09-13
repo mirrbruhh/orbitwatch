@@ -70,9 +70,13 @@ def format_duration(seconds):
     Strict modulo arithmetic (divmod) is used to prevent boundary rollover 
     artifacts (e.g., 59.9 minutes rounding to '60m' instead of '1h').
     """
+
     if seconds == float("inf"):
         return "N/A"
     
+    if 0 < seconds < 60:
+        return "< 1m"  # Catches rapid chemical burns so they don't show as 0m
+        
     total_s = int(round(seconds))
     days, remainder = divmod(total_s, 86400)
     hours, remainder = divmod(remainder, 3600)
@@ -83,7 +87,6 @@ def format_duration(seconds):
     elif hours > 0:
         return f"~ {hours}h {minutes}m"
     return f"~ {minutes}m"
-
 
 @st.cache_data(ttl=3600)
 def load_tle_web():
@@ -248,13 +251,13 @@ with tab_mission:
     st.markdown("#### Sequential Mass & Propellant Bookkeeping")
     st.write(f"Tracking a **{M0_KG:.0f} kg** spacecraft through its full lifecycle. Because a satellite gets lighter as it burns fuel, station-keeping and deorbit burns are calculated using the dynamic depleted mass, not the initial wet mass.")
 
-    # Data collections for the charts
+    # Data collections for charts
     names = []
     raise_masses, sk_masses, deorbit_masses = [], [], []
     total_times = []
     
-    # Data collection for the detailed breakdown table
-    breakdown_rows = []
+    # Phase-separated collections for the table
+    phase1_rows, phase2_rows, phase3_rows = [], [], []
     
     r_perigee = EARTH_RADIUS + PERIGEE_ALT_KM
     
@@ -279,51 +282,33 @@ with tab_mission:
         # 3. Deorbit
         mp_deorbit = propellant_mass(deorbit_m_s, isp, m_current)
         t_deorbit = transfer_time_estimate(deorbit_m_s, thrust, m_current) if mode == "Electric" else hohmann_coast_time(r2, r_perigee)
-        m_current -= mp_deorbit # m_current is now Final Dry Mass
+        m_current -= mp_deorbit 
         
         total_mp = mp_raise + mp_sk + mp_deorbit
-        total_t = t_raise + t_deorbit # (Ignoring SK time for transit charts as it's spread over 5 years)
+        total_t = t_raise + t_deorbit 
 
-        # Store for charts
         names.append(THRUSTER_SHORT_NAMES.get(tname, tname))
         raise_masses.append(mp_raise)
         sk_masses.append(mp_sk)
         deorbit_masses.append(mp_deorbit)
         total_times.append(total_t)
         
-        # Store for the table
-        breakdown_rows.append({
-            "Thruster": tname,
-            "Phase": "1. Orbit Raise",
-            "Prop. Used": f"{mp_raise:.2f} kg",
-            "Spacecraft Mass Remaining": f"{m_current + mp_sk + mp_deorbit:.2f} kg",
-            "Burn / Coast Time": format_duration(t_raise)
-        })
-        breakdown_rows.append({
-            "Thruster": tname,
-            "Phase": "2. Station-Keeping (5y)",
-            "Prop. Used": f"{mp_sk:.2f} kg",
-            "Spacecraft Mass Remaining": f"{m_current + mp_deorbit:.2f} kg",
-            "Burn / Coast Time": f"{format_duration(t_sk)} (Accumulated)"
-        })
-        breakdown_rows.append({
-            "Thruster": tname,
-            "Phase": "3. Deorbit",
-            "Prop. Used": f"{mp_deorbit:.2f} kg",
-            "Spacecraft Mass Remaining": f"{m_current:.2f} kg (Final Dry Mass)",
-            "Burn / Coast Time": format_duration(t_deorbit)
-        })
+        # Populate phase-specific lists for grouped table display
+        phase1_rows.append({"Phase": "1. Orbit Raise", "Thruster": tname, "Prop. Used": f"{mp_raise:.2f} kg", "Mass Remaining": f"{m_current + mp_sk + mp_deorbit:.2f} kg", "Burn / Coast Time": format_duration(t_raise)})
+        phase2_rows.append({"Phase": f"2. Station-Keeping ({LIFETIME_YEARS:.0f}y)", "Thruster": tname, "Prop. Used": f"{mp_sk:.2f} kg", "Mass Remaining": f"{m_current + mp_deorbit:.2f} kg", "Burn / Coast Time": f"{format_duration(t_sk)} (Accumulated)"})
+        phase3_rows.append({"Phase": "3. Deorbit", "Thruster": tname, "Prop. Used": f"{mp_deorbit:.2f} kg", "Mass Remaining": f"{m_current:.2f} kg (Final Dry Mass)", "Burn / Coast Time": format_duration(t_deorbit)})
 
-    # Detailed Table Expander
+    # Combine table rows ordered by Phase
+    breakdown_rows = phase1_rows + phase2_rows + phase3_rows
+
     with st.expander("🔍 View Detailed Phase-by-Phase Breakdown Table", expanded=False):
         st.dataframe(pd.DataFrame(breakdown_rows), use_container_width=True, hide_index=True)
 
-    # Plotting Trade-off Charts (Thread-safe)
+    # Plotting Trade-off Charts
     from matplotlib.figure import Figure
     fig2 = Figure(figsize=(11, 5))
     ax_mass, ax_time = fig2.subplots(1, 2)
 
-    # --- Stacked Bar Chart for Mass ---
     bottom_sk = raise_masses
     bottom_deorbit = [i+j for i,j in zip(raise_masses, sk_masses)]
     
@@ -331,11 +316,10 @@ with tab_mission:
     p2 = ax_mass.bar(names, sk_masses, bottom=bottom_sk, label='Station-Keep', color='#2A9D8F')
     p3 = ax_mass.bar(names, deorbit_masses, bottom=bottom_deorbit, label='Deorbit Burn', color='#E9C46A')
     
-    # Add total label on top of the stacked bars
     totals = [i+j+k for i,j,k in zip(raise_masses, sk_masses, deorbit_masses)]
     for idx, rect in enumerate(p3):
         height = rect.get_y() + rect.get_height()
-        ax_mass.text(rect.get_x() + rect.get_width()/2., height + 0.5,
+        ax_mass.text(rect.get_x() + rect.get_width()/2., height + max(totals)*0.02,
                 f'{totals[idx]:.1f} kg', ha='center', va='bottom', fontsize=9)
 
     ax_mass.set_ylabel("Propellant Mass (kg)")
@@ -344,11 +328,10 @@ with tab_mission:
     ax_mass.legend(fontsize=8)
     ax_mass.grid(axis='y', linestyle='--', alpha=0.3)
 
-    # --- Time Bar Chart ---
     bars_time = ax_time.bar(names, total_times, color='#E76F51')
     time_labels = [format_duration(ts) for ts in total_times]
     ax_time.bar_label(bars_time, labels=time_labels, padding=3, fontsize=9)
-    ax_time.set_ylabel("Total Active Transfer Time (Raise + Deorbit)")
+    ax_time.set_ylabel("Total Active Transfer Time (Raise/Lowering + Deorbit)")
     ax_time.set_title("Time Cost (Excluding 5yr SK)")
     ax_time.set_yticks([]) 
     ax_time.margins(y=0.15)
@@ -356,11 +339,36 @@ with tab_mission:
     fig2.tight_layout()
     st.pyplot(fig2)
     
-    with st.expander("Physics Note: Deriving Thrust vs. Assuming It"):
-        st.write(
-            "Thrust parameters for Electric propulsion modes are derived dynamically via "
-            "`F = 2 * P * eta / v_e` rather than relying on assumed fixed values. "
-            "This architectural decision ensures energy conservation laws are respected; "
-            "arbitrarily pairing independent inputs for power, thrust, and specific impulse "
-            "frequently results in unphysical models demanding >100% electrical efficiency."
-        )
+   # --- Executive Summary & Assumptions Section ---
+    st.markdown("#### Executive Summary & Trade-Off Analysis")
+    
+    # 1. Dynamic Mission-Specific Insight
+    if "Mission A" in mission_label:
+        st.info(f"**Mission-Specific Insight ({mission_label}):** \nWith a modest total $\Delta V$ budget (~192 m/s), chemical propulsion is highly viable if rapid operational deployment is the priority. However, utilizing Electric propulsion saves ~50 kg of propellant—which for a 1000 kg smallsat can significantly increase the mass available for revenue-generating payloads (cameras, sensors, transponders).")
+    
+    elif "Mission B" in mission_label:
+        st.info(f"**Mission-Specific Insight ({mission_label}):** \nThis high-energy transfer (~841 m/s) severely punishes chemical propulsion, which consumes nearly 25% of the spacecraft's initial mass just for fuel. Electric propulsion (Ion/Hall) is heavily recommended here to preserve payload capacity, though the mission planners must tolerate a slow spiral transfer time of several weeks.")
+    
+    elif "Mission C" in mission_label:
+        st.info(f"**Mission-Specific Insight ({mission_label}):** \nLowering from a rideshare orbit to 500 km means the satellite will face a high atmospheric drag environment (~35 m/s over 5 years). Water Microwave Plasma presents a strong middle ground here: fast enough to reach operational altitude quickly, but efficient enough to sustain the 5-year drag makeup without eating up the mass budget.")
+
+    # 2. Combined Technology Summary
+    st.success("""
+    **Combined Technology Summary (Applicable across all missions):**
+    * **Heaviest Payload Capacity (Mass Efficiency):** **Ion and Hall thrusters** require the least propellant. By saving hundreds of kilograms of fuel compared to chemical propulsion, that mass can be replaced with payload.
+    * **Fastest Operational Response (Time Cost):** **Chemical Bipropellant** is the only technology that executes orbital transfers in hours. Electric thrusters take weeks to spiral, delaying the start of the satellite's revenue-generating lifespan.
+    * **The Middle Ground:** **Microwave Plasma (Water) thrusters** offer a strong compromise, requiring vastly less mass than chemical rockets while using safe, non-toxic, easily storable propellants (water) compared to expensive Xenon gas used in Ion/Hall systems.
+    """)
+
+    # 3. Sources Expander
+
+    with st.expander("📚 Systems Engineering Assumptions & Sources"):
+        st.markdown("""
+        **Where do these numbers come from?**
+        * **Drag Profile:** Station-keeping estimates rely on the industry-standard *Space Mission Analysis and Design (SMAD)* text. E.g., 500 km altitudes incur a baseline penalty of ~7.0 m/s/year.
+        * **Deorbit Perigee (150 km):** Satellites are modeled to lower their perigee to 150 km to ensure rapid, passive aerodynamic destruction in Earth's dense upper atmosphere.
+        * **Bellatrix Microwave Plasma:** The 1200s Isp modeled here represents published performance targets by [Bellatrix Aerospace](https://bellatrix.aero/jal) for their water-based thrusters (roughly 4x the efficiency of chemical thrusters).
+        * **Electric Thrust Derivation:** Thrust is strictly derived from electrical power and specific impulse ($F = 2 P \eta / v_e$) to enforce energy conservation, preventing inputs that inadvertently assume >100% efficiency.
+        * **Gravity Losses:** The model assumes impulsive Delta-V. In physical operations, a chemical engine would not burn continuously for 28 minutes in LEO (which would incur massive gravity losses). Real missions, such as ISRO's Mangalyaan (MOM), segment these into multiple short 5-minute perigee bursts over several orbits to remain efficient.
+        * **Chemical Station-Keeping (< 1m):** Chemical rockets produce massive thrust (500 N in this model). A 5-year drag makeup maneuver that takes an electric thruster 24 hours to achieve will take a chemical thruster roughly ~20 seconds of total firing time, hence appearing as '< 1m'.
+        """)
