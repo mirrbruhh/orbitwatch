@@ -11,10 +11,9 @@ YEARS = 5.0
 # Sanity-check bounds specific to station-keeping: name -> (Nominal_Total_m_s, Min_Bound, Max_Bound)
 # Source: SMAD (Space Mission Analysis and Design, 4th Edition, Chapter 8)
 SK_BOUNDS = {
-    # 600 km, not 500: see src/missions.py for why the rate (and this bound) is lower than Mission C's.
+    # Reflects the 600 km operating altitude; see src/missions.py for the rate this is checked against.
     "Mission A (Indian Smallsat)": (10.0, 5.0, 15.0),
-    # Not exactly zero: 0.1 m/s/yr (see src/missions.py) is a conservative
-    # upper bound at 1500 km, so this is a real comparison, not a tautology.
+    # Reflects the 0.1 m/s/yr conservative upper bound at 1500 km; see src/missions.py.
     "Mission B (Ambitious High Raise)": (0.5, 0.0, 0.5),
     "Mission C (Rideshare Lowering)": (35.0, 20.0, 50.0),  # operates at 500 km after lowering
 }

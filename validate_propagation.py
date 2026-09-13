@@ -7,7 +7,7 @@ import time
 DATA_FILE = "data/iss.txt"
 MAX_TLE_AGE_SECONDS = 24 * 3600  # TLE accuracy degrades within days; refreshing it at least daily
 
-# SMART FALLBACK: If the file doesn't exist/or is older than 24 hours, fetch it once automatically!
+# Fetch a fresh TLE if the cache is missing or older than a day.
 needs_fetch = (
     not os.path.exists(DATA_FILE)
     or (time.time() - os.path.getmtime(DATA_FILE)) > MAX_TLE_AGE_SECONDS

@@ -42,7 +42,9 @@ def mission_total_delta_v(alt1, alt2, annual_rate_m_s):
     deorbit_dv = deorbit_delta_v(r2, r_perigee)
     return (raise_dv + sk_dv + deorbit_dv) * 1000.0
 
-# Thruster specifications: (Name, Isp_s, Efficiency, Power_W, Thrust_N, Mode)
+# Thruster specifications: (Name, Isp_s, Efficiency, Power_W, Thrust_N, Mode).
+# Thrust_N is used directly only for Chemical; Electric thrusters derive thrust from Power_W and Efficiency instead,
+# so it stays physically consistent with the stated power and efficiency.
 THRUSTERS = [
     ("Chemical Bipropellant", 300, 0.95, 0.0, 500.0, "Chemical"),
     ("Hall Thruster", 1800, 0.50, 3000.0, None, "Electric"),
@@ -68,7 +70,7 @@ for mission_name, params in MISSIONS.items():
     print("   " + "-" * 100)
     
     for name, isp, eta, power, thrust, mode in THRUSTERS:
-        v_e = exhaust_velocity(isp)  # Now actively used in the table!
+        v_e = exhaust_velocity(isp)
         mp = propellant_mass(dv_total, isp, M0_KG)
         if mode == "Electric":
             thrust = thrust_from_power(power, eta, v_e)
