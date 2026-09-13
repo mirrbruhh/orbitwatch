@@ -301,8 +301,22 @@ with tab_mission:
     # Combine table rows ordered by Phase
     breakdown_rows = phase1_rows + phase2_rows + phase3_rows
 
-    with st.expander("🔍 View Detailed Phase-by-Phase Breakdown Table", expanded=False):
-        st.dataframe(pd.DataFrame(breakdown_rows), use_container_width=True, hide_index=True)
+    with st.expander("🔍 View Detailed Phase-by-Phase Breakdown", expanded=False):
+        
+        # Phase 1 Table
+        st.markdown("##### 1. Orbit Raise")
+        df1 = pd.DataFrame(phase1_rows).drop(columns=["Phase"])
+        st.dataframe(df1, use_container_width=True, hide_index=True)
+        
+        # Phase 2 Table
+        st.markdown(f"##### 2. Station-Keeping ({LIFETIME_YEARS:.0f} Years)")
+        df2 = pd.DataFrame(phase2_rows).drop(columns=["Phase"])
+        st.dataframe(df2, use_container_width=True, hide_index=True)
+        
+        # Phase 3 Table
+        st.markdown("##### 3. End-of-Life Deorbit")
+        df3 = pd.DataFrame(phase3_rows).drop(columns=["Phase"])
+        st.dataframe(df3, use_container_width=True, hide_index=True)
 
     # Plotting Trade-off Charts
     from matplotlib.figure import Figure
