@@ -245,63 +245,117 @@ with tab_mission:
 
     st.divider()
     
-    st.markdown("#### Thruster Comparison")
-    st.write(f"Calculating propellant requirements to deliver **{total_m_s:.0f} m/s** to a **{M0_KG:.0f} kg** spacecraft.")
+    st.markdown("#### Sequential Mass & Propellant Bookkeeping")
+    st.write(f"Tracking a **{M0_KG:.0f} kg** spacecraft through its full lifecycle. Because a satellite gets lighter as it burns fuel, station-keeping and deorbit burns are calculated using the dynamic depleted mass, not the initial wet mass.")
 
-    coast_s = hohmann_coast_time(r1, r2)
-    rows = []
-    scatter_data = []
+    # Data collections for the charts
+    names = []
+    raise_masses, sk_masses, deorbit_masses = [], [], []
+    total_times = []
+    
+    # Data collection for the detailed breakdown table
+    breakdown_rows = []
+    
+    r_perigee = EARTH_RADIUS + PERIGEE_ALT_KM
     
     for tname, isp, eta, power, mode in THRUSTERS:
         v_e = exhaust_velocity(isp)
-        mp = propellant_mass(total_m_s, isp, M0_KG)
-        
         if mode == "Electric":
             thrust = thrust_from_power(power, eta, v_e)
         else:
             thrust = CHEMICAL_THRUST_N
             
-        burn_s = transfer_time_estimate(total_m_s, thrust, M0_KG)
-        transit_s = coast_s if mode == "Chemical" else burn_s
-        transit = f"Hohmann ({format_duration(coast_s)})" if mode == "Chemical" else f"Spiral ({format_duration(burn_s)})"
+        # 1. Orbit Raise
+        m_current = M0_KG
+        mp_raise = propellant_mass(raise_m_s, isp, m_current)
+        t_raise = transfer_time_estimate(raise_m_s, thrust, m_current) if mode == "Electric" else hohmann_coast_time(r1, r2)
+        m_current -= mp_raise
+        
+        # 2. Station-Keeping
+        mp_sk = propellant_mass(sk_m_s, isp, m_current)
+        t_sk = transfer_time_estimate(sk_m_s, thrust, m_current) if mode == "Electric" else 0.0
+        m_current -= mp_sk
+        
+        # 3. Deorbit
+        mp_deorbit = propellant_mass(deorbit_m_s, isp, m_current)
+        t_deorbit = transfer_time_estimate(deorbit_m_s, thrust, m_current) if mode == "Electric" else hohmann_coast_time(r2, r_perigee)
+        m_current -= mp_deorbit # m_current is now Final Dry Mass
+        
+        total_mp = mp_raise + mp_sk + mp_deorbit
+        total_t = t_raise + t_deorbit # (Ignoring SK time for transit charts as it's spread over 5 years)
 
-        rows.append({
-            "Thruster Tech": tname,
-            "Isp (s)": isp,
-            "Propellant Required": f"{mp:.1f} kg",
-            "Burn Time": format_duration(burn_s),
-            "Transfer Type": transit,
+        # Store for charts
+        names.append(THRUSTER_SHORT_NAMES.get(tname, tname))
+        raise_masses.append(mp_raise)
+        sk_masses.append(mp_sk)
+        deorbit_masses.append(mp_deorbit)
+        total_times.append(total_t)
+        
+        # Store for the table
+        breakdown_rows.append({
+            "Thruster": tname,
+            "Phase": "1. Orbit Raise",
+            "Prop. Used": f"{mp_raise:.2f} kg",
+            "Spacecraft Mass Remaining": f"{m_current + mp_sk + mp_deorbit:.2f} kg",
+            "Burn / Coast Time": format_duration(t_raise)
         })
-        scatter_data.append((tname, transit_s, mp))
+        breakdown_rows.append({
+            "Thruster": tname,
+            "Phase": "2. Station-Keeping (5y)",
+            "Prop. Used": f"{mp_sk:.2f} kg",
+            "Spacecraft Mass Remaining": f"{m_current + mp_deorbit:.2f} kg",
+            "Burn / Coast Time": f"{format_duration(t_sk)} (Accumulated)"
+        })
+        breakdown_rows.append({
+            "Thruster": tname,
+            "Phase": "3. Deorbit",
+            "Prop. Used": f"{mp_deorbit:.2f} kg",
+            "Spacecraft Mass Remaining": f"{m_current:.2f} kg (Final Dry Mass)",
+            "Burn / Coast Time": format_duration(t_deorbit)
+        })
 
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    # Detailed Table Expander
+    with st.expander("🔍 View Detailed Phase-by-Phase Breakdown Table", expanded=False):
+        st.dataframe(pd.DataFrame(breakdown_rows), use_container_width=True, hide_index=True)
 
-    names = [THRUSTER_SHORT_NAMES.get(t, t) for t, _, _ in scatter_data]
-    masses = [mp for _, _, mp in scatter_data]
-    times_s = [ts for _, ts, _ in scatter_data]
-    colors = [THRUSTER_COLORS.get(t, "gray") for t, _, _ in scatter_data]
-
-    fig2 = Figure(figsize=(10, 4.5))
+    # Plotting Trade-off Charts (Thread-safe)
+    from matplotlib.figure import Figure
+    fig2 = Figure(figsize=(11, 5))
     ax_mass, ax_time = fig2.subplots(1, 2)
 
-    bars_mass = ax_mass.bar(names, masses, color=colors)
-    ax_mass.bar_label(bars_mass, fmt="%.1f kg", padding=3, fontsize=9)
+    # --- Stacked Bar Chart for Mass ---
+    bottom_sk = raise_masses
+    bottom_deorbit = [i+j for i,j in zip(raise_masses, sk_masses)]
+    
+    p1 = ax_mass.bar(names, raise_masses, label='Raise Burn', color='#264653')
+    p2 = ax_mass.bar(names, sk_masses, bottom=bottom_sk, label='Station-Keep', color='#2A9D8F')
+    p3 = ax_mass.bar(names, deorbit_masses, bottom=bottom_deorbit, label='Deorbit Burn', color='#E9C46A')
+    
+    # Add total label on top of the stacked bars
+    totals = [i+j+k for i,j,k in zip(raise_masses, sk_masses, deorbit_masses)]
+    for idx, rect in enumerate(p3):
+        height = rect.get_y() + rect.get_height()
+        ax_mass.text(rect.get_x() + rect.get_width()/2., height + 0.5,
+                f'{totals[idx]:.1f} kg', ha='center', va='bottom', fontsize=9)
+
     ax_mass.set_ylabel("Propellant Mass (kg)")
-    ax_mass.set_title("Propellant Cost")
+    ax_mass.set_title("Propellant Cost Breakdown")
     ax_mass.margins(y=0.15)
+    ax_mass.legend(fontsize=8)
     ax_mass.grid(axis='y', linestyle='--', alpha=0.3)
 
-    bars_time = ax_time.bar(names, times_s, color=colors)
-    time_labels = [format_duration(ts) for ts in times_s]
+    # --- Time Bar Chart ---
+    bars_time = ax_time.bar(names, total_times, color='#E76F51')
+    time_labels = [format_duration(ts) for ts in total_times]
     ax_time.bar_label(bars_time, labels=time_labels, padding=3, fontsize=9)
-    ax_time.set_ylabel("Transit Duration")
-    ax_time.set_title("Time Cost")
+    ax_time.set_ylabel("Total Active Transfer Time (Raise + Deorbit)")
+    ax_time.set_title("Time Cost (Excluding 5yr SK)")
     ax_time.set_yticks([]) 
     ax_time.margins(y=0.15)
 
     fig2.tight_layout()
     st.pyplot(fig2)
-
+    
     with st.expander("Physics Note: Deriving Thrust vs. Assuming It"):
         st.write(
             "Thrust parameters for Electric propulsion modes are derived dynamically via "
