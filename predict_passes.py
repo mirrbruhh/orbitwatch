@@ -1,68 +1,61 @@
-# Predicting ISS passes over Mumbai
+"""
+Local utility: Ground station coverage and revisit frequency analysis.
+"""
 
 import os
+import time
 from skyfield.api import load, EarthSatellite
 from src.coverage import get_passes_over_location
 from fetch_tle import fetch_and_cache_tle
-import time
 
 DATA_FILE = "data/iss.txt"
-MAX_TLE_AGE_SECONDS = 24 * 3600  # TLE accuracy degrades within days; refreshing it at least daily
+MAX_TLE_AGE_SECONDS = 24 * 3600  
 
-# Fetch a fresh TLE if the cache is missing or older than a day.
-needs_fetch = (
-    not os.path.exists(DATA_FILE)
-    or (time.time() - os.path.getmtime(DATA_FILE)) > MAX_TLE_AGE_SECONDS
-)
-if needs_fetch:
-    print("No cached TLE found (or it's stale). Downloading from CelesTrak...")
+if not os.path.exists(DATA_FILE) or (time.time() - os.path.getmtime(DATA_FILE)) > MAX_TLE_AGE_SECONDS:
+    print("Initiating upstream TLE synchronization...")
     fetch_and_cache_tle()
 
-# Read the cached TLE
 with open(DATA_FILE, "r", encoding="utf-8") as f:
     lines = [line.strip() for line in f if line.strip()]
 
 name, line1, line2 = lines[0], lines[1], lines[2]
-print(f"\nSatellite: {name}")
-
-# Creating satellite object
 ts = load.timescale()
 satellite = EarthSatellite(line1, line2, name, ts)
 
-# Defining Mumbai's coordinates
-MUMBAI_LAT = 19.0760
-MUMBAI_LON = 72.8777
+# Target Ground Station: Mumbai
+MUMBAI_LAT, MUMBAI_LON = 19.0760, 72.8777
 
 def get_compass_direction(deg):
-    """Convert azimuth degrees (0-360) to compass directions."""
+    """Maps azimuth degree vectors to nominal compass headings."""
     points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
     return points[int((deg + 22.5) % 360 // 45)]
 
-print(f"Evaluating pass geometry for {name} over Mumbai (Lat: {MUMBAI_LAT}, Lon: {MUMBAI_LON})")
+print(f"\nEvaluating Topocentric Geometry: {name} over Ground Station [{MUMBAI_LAT}, {MUMBAI_LON}]")
 passes_24h = get_passes_over_location(satellite, MUMBAI_LAT, MUMBAI_LON, duration_days=1, horizon_degrees=10)
 
 if not passes_24h:
-    print("No passes above 10° horizon found in the next 24 hours.")
+    print("STATUS: No passes >10° horizon detected in the 24h operational window.")
 else:
-    print(f"\nNext {len(passes_24h)} pass(es) over Mumbai (24h Window):")
+    print(f"\nUpcoming Passes (24h Window): {len(passes_24h)} Event(s)")
     for i, p in enumerate(passes_24h, start=1):
         rise = p['rise_time'].utc_iso().replace('T', ' ')
         culm = p['culminate_time'].utc_iso().replace('T', ' ')
         sett = p['set_time'].utc_iso().replace('T', ' ')
         compass = get_compass_direction(p['azimuth_deg'])
-        print(f"{i}. Rise: {rise} UTC | Peak: {culm} UTC (Elev: {p['max_elevation_deg']:.1f}°, Az: {p['azimuth_deg']:.1f}° {compass}, Range: {p['distance_km']:.0f} km) | Set: {sett} UTC | Dur: {p['duration_seconds']/60:.1f}m")
+        
+        print(f"  [{i}] AOS: {rise} | Peak: {culm} (Elev: {p['max_elevation_deg']:.1f}°, Range: {p['distance_km']:.0f}km) | LOS: {sett}")
 
-# Statistically valid 7-day revisit metric :
+# Statistical Revisit Analysis
 passes_7d = get_passes_over_location(satellite, MUMBAI_LAT, MUMBAI_LON, duration_days=7, horizon_degrees=10)
 
 print("\n" + "=" * 60)
-print("7-DAY REVISIT METRIC")
+print("REVISIT METRICS (7-DAY BASELINE)")
 print("=" * 60)
-if passes_7d and len(passes_7d) > 0:
-    count_7d = len(passes_7d)
-    revisit_hours = (7.0 * 24.0) / count_7d
-    print(f"Total passes detected over 7 days: {count_7d}")
-    print(f"Average Revisit Interval: {revisit_hours:.1f} hours")
-    print(f"The ISS revisits Mumbai roughly every {revisit_hours:.1f} hours on average.")
+if passes_7d:
+    count = len(passes_7d)
+    revisit_hours = (7.0 * 24.0) / count
+    print(f"Total Acquisition Opportunities: {count}")
+    print(f"Average Revisit Interval:      {revisit_hours:.1f} hours")
 else:
-    print("No passes detected over the 7-day observation window.")
+    print("STATUS: Unreachable orbit for this ground station.")
+print("=" * 60)
