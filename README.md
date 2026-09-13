@@ -35,6 +35,7 @@ While typical tracking applications conclude at geospatial plotting, OrbitWatch 
 *   **High-Performance Vectorization:** Replaces slow Python `for`-loops with `NumPy` array transformations and vectorized Skyfield time-objects, accelerating ground track generation and effectively neutralizing canvas-crossing artifacts at the International Date Line.
 *   **Concurrency Safe:** The Streamlit deployment bypasses local disk I/O, utilizing in-memory thread-safe caching to prevent Time-of-Check to Time-of-Use (TOCTOU) file corruption under concurrent web traffic. 
 *   **Memory Management:** Implements strict teardown procedures for Matplotlib state machines (`plt.close()`) to guarantee continuous uptime without Out-of-Memory (OOM) leaks.
+*   **Sequential Mass Bookkeeping:** Evaluates propellant budgets chronologically (Orbit Raise $\rightarrow$ Station-Keeping $\rightarrow$ Deorbit). As fuel is consumed, the spacecraft's dynamic dry mass is updated and passed to the next maneuver phase, ensuring highly accurate $m_0$ inputs for the Tsiolkovsky equation rather than naively applying the initial wet mass to all calculations.
 
 ## 🚀 Mission Trade Studies
 
