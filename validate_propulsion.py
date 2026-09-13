@@ -1,4 +1,5 @@
 # Module 4: Validate propulsion trade-study calculations across mission profiles
+# Now featuring sequential Mass Budget Bookkeeping.
 
 from src.propulsion import propellant_mass, transfer_time_estimate, exhaust_velocity, thrust_from_power
 from src.deltav import (
@@ -11,10 +12,7 @@ from src.deltav import (
 from src.missions import MISSIONS
 
 def format_duration(seconds):
-    """
-    Format duration outputs utilizing strict integer modulo arithmetic to 
-    maintain chronological accuracy and prevent floating-point rollover artifacts.
-    """
+    """Safely formats duration using strict modulo math."""
     if seconds == float('inf'):
         return "N/A"
         
@@ -34,16 +32,6 @@ M0_KG = 1000.0
 LIFETIME_YEARS = 5.0
 PERIGEE_ALT_KM = 150.0
 
-def mission_total_delta_v(alt1, alt2, annual_rate_m_s):
-    """Aggregates maneuver requirements into a single Delta-V budget."""
-    r1 = EARTH_RADIUS + alt1
-    r2 = EARTH_RADIUS + alt2
-    _, _, raise_dv = hohmann_transfer(r1, r2)
-    sk_dv = station_keeping_delta_v(annual_rate_m_s, LIFETIME_YEARS)
-    r_perigee = EARTH_RADIUS + PERIGEE_ALT_KM
-    deorbit_dv = deorbit_delta_v(r2, r_perigee)
-    return (raise_dv + sk_dv + deorbit_dv) * 1000.0
-
 THRUSTERS = [
     ("Chemical Bipropellant", 300, 0.95, 0.0, 500.0, "Chemical"),
     ("Hall Thruster", 1800, 0.50, 3000.0, None, "Electric"),
@@ -51,53 +39,80 @@ THRUSTERS = [
     ("Water Microwave Plasma", 1200, 0.45, 1500.0, None, "Electric"),
 ]
 
-print("\n" + "=" * 105)
-print(f"{'PROPULSION TRADE STUDY: MISSION COMPARISON':^105}")
-print("=" * 105)
+print("\n" + "=" * 90)
+print(f"{'PROPULSION TRADE STUDY: SEQUENTIAL MASS BOOKKEEPING':^90}")
+print("=" * 90)
 
 for mission_name, params in MISSIONS.items():
     alt1, alt2 = params["alt1"], params["alt2"]
     r1 = EARTH_RADIUS + alt1
     r2 = EARTH_RADIUS + alt2
-    dv_total = mission_total_delta_v(alt1, alt2, params["annual_rate"])
-    coast_s = hohmann_coast_time(r1, r2)
-    coast_str = format_duration(coast_s)
+    r_perigee = EARTH_RADIUS + PERIGEE_ALT_KM
     
-    print(f"\n ► {mission_name}")
-    print(f"   Total Δv: {dv_total:.1f} m/s | Spacecraft Wet Mass: {M0_KG:.0f} kg")
-    print(f"   {'Thruster Technology':<26} {'Isp (s)':>9} {'Exhaust Vel':>15} {'Prop. Mass':>14} {'Burn Time':>12} {'Transit Duration':>18}")
-    print("   " + "-" * 100)
+    # Calculate Delta-V for each phase
+    _, _, raise_dv = hohmann_transfer(r1, r2)
+    sk_dv = station_keeping_delta_v(params["annual_rate"], LIFETIME_YEARS)
+    deorbit_dv = deorbit_delta_v(r2, r_perigee)
+    
+    # Convert to m/s
+    raise_dv *= 1000.0
+    sk_dv *= 1000.0
+    deorbit_dv *= 1000.0
+    total_dv = raise_dv + sk_dv + deorbit_dv
+    
+    print(f"\n🚀 {mission_name}")
+    print(f"   Initial Wet Mass: {M0_KG:.1f} kg | Total Mission ΔV: {total_dv:.1f} m/s")
+    print("-" * 90)
     
     for name, isp, eta, power, thrust, mode in THRUSTERS:
         v_e = exhaust_velocity(isp)
-        mp = propellant_mass(dv_total, isp, M0_KG)
         if mode == "Electric":
             thrust = thrust_from_power(power, eta, v_e)
-        burn_s = transfer_time_estimate(dv_total, thrust, M0_KG)
-        burn_str = format_duration(burn_s)
-        
-        v_e_str = f"{v_e/1000:.2f} km/s"
-        isp_str = f"{isp} s"
-        transit_str = f"Hohmann (~{coast_str})" if mode == "Chemical" else f"Spiral (~{burn_str})"
             
-        print(f"   {name:<26} {isp_str:>9} {v_e_str:>15} {mp:>12.1f} kg {burn_str:>12} {transit_str:>18}")
+        m_current = M0_KG
+        
+        # 1. Orbit Raise
+        mp_raise = propellant_mass(raise_dv, isp, m_current)
+        t_raise = transfer_time_estimate(raise_dv, thrust, m_current) if mode == "Electric" else hohmann_coast_time(r1, r2)
+        m_current -= mp_raise
+        
+        # 2. Station-Keeping (5 Years)
+        mp_sk = propellant_mass(sk_dv, isp, m_current)
+        t_sk = transfer_time_estimate(sk_dv, thrust, m_current) if mode == "Electric" else 0.0 # Impulsive chemical SK time is negligible
+        m_current -= mp_sk
+        
+        # 3. Deorbit
+        mp_deorbit = propellant_mass(deorbit_dv, isp, m_current)
+        t_deorbit = transfer_time_estimate(deorbit_dv, thrust, m_current) if mode == "Electric" else hohmann_coast_time(r2, r_perigee)
+        m_current -= mp_deorbit
+        
+        total_mp = mp_raise + mp_sk + mp_deorbit
+        
+        print(f"   {name.upper()} (Isp: {isp}s)")
+        print(f"     {'Phase':<16} | {'ΔV (m/s)':<10} | {'Prop Used (kg)':<15} | {'Mass Remaining':<16} | {'Active/Coast Time'}")
+        print(f"     {'-'*81}")
+        print(f"     {'Orbit Raise':<16} | {raise_dv:<10.1f} | {mp_raise:<15.2f} | {m_current + mp_sk + mp_deorbit:<16.2f} | {format_duration(t_raise)}")
+        print(f"     {'Station-Keeping':<16} | {sk_dv:<10.1f} | {mp_sk:<15.2f} | {m_current + mp_deorbit:<16.2f} | {format_duration(t_sk)} (Accumulated)")
+        print(f"     {'Deorbit':<16} | {deorbit_dv:<10.1f} | {mp_deorbit:<15.2f} | {m_current:<16.2f} | {format_duration(t_deorbit)}")
+        print(f"     {'-'*81}")
+        print(f"     {'TOTAL / DRY MASS':<16} | {total_dv:<10.1f} | {total_mp:<15.2f} | {m_current:<16.2f} |\n")
 
+# --- First Principles Physics Check Below ---
 q = 1.602e-19        
 V = 1000.0           
 m_ion = 2.18e-25     
-
 v_e_calc = (2.0 * q * V / m_ion) ** 0.5
 isp_calc = v_e_calc / 9.80665
 
-print("\n" + "=" * 105)
-print(f"{'PHYSICS MODEL VERIFICATION: ELECTROSTATIC ION ACCELERATION':^105}")
-print("=" * 105)
+print("=" * 90)
+print(f"{'PHYSICS MODEL VERIFICATION: ELECTROSTATIC ION ACCELERATION':^90}")
+print("=" * 90)
 print(f"  Input Grid Voltage (V):          {V:.1f} V")
 print(f"  Propellant Ion:                  Xenon (Xe+, m = {m_ion:.2e} kg, q = {q:.2e} C)")
 print(f"  Theoretical Exhaust Velocity:    {v_e_calc/1000:.2f} km/s")
 print(f"  Theoretical Specific Impulse:    {isp_calc:.0f} s")
 if 3000 <= isp_calc <= 4500:
-    print("  Benchmark Status:                [PASS] Validates high Isp (>3000s) regime from first principles.")
+    print("  Benchmark Status:                [PASS] Validates high Isp (>3000s) regime.")
 else:
     print("  Benchmark Status:                [FAIL] Outside expected ion propulsion regime.")
-print("=" * 105)
+print("=" * 90)
