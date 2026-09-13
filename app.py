@@ -1,26 +1,19 @@
 """
-OrbitWatch dashboard.
+OrbitWatch Dashboard.
 
-Ties together the four modules built over the course of the project:
-  - src/propagate.py   (Day 1: where is the satellite right now)
-  - src/coverage.py    (Day 2: ground track + passes over Mumbai)
-  - src/deltav.py      (Day 3: delta-v budget per mission)
-  - src/propulsion.py  (Day 4: propellant mass / burn time per thruster)
-
+Provides a unified interface for orbital telemetry tracking, ground coverage 
+analysis, and a first-principles propulsion trade study. 
 Run locally with: streamlit run app.py
 """
 
-import os
-import time
-from datetime import timedelta
-
+import requests
+import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
+from matplotlib.figure import Figure
 from skyfield.api import EarthSatellite, load
 
-from fetch_tle import FILE_PATH as DATA_FILE
-from fetch_tle import fetch_and_cache_tle
 from src.coverage import compute_ground_track, get_passes_over_location
 from src.deltav import (
     EARTH_RADIUS,
@@ -38,75 +31,90 @@ from src.propulsion import (
     transfer_time_estimate,
 )
 
-st.set_page_config(page_title="OrbitWatch", page_icon="satellite", layout="wide")
+st.set_page_config(page_title="OrbitWatch", page_icon="🛰️", layout="wide")
 
-MAX_TLE_AGE_SECONDS = 24 * 3600
+URL = "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE"
 MUMBAI_LAT, MUMBAI_LON = 19.0760, 72.8777
 PERIGEE_ALT_KM = 150.0
 M0_KG = 1000.0
-
 LIFETIME_YEARS = 5.0
 
-# Mission parameters live in src/missions.py, shared with every
-# validate_*.py script, so altitude and station-keeping assumptions stay
-# consistent between the dashboard and the validation scripts.
-
-# (Name, Isp_s, Efficiency, Power_W, Mode). Thrust for electric thrusters
-# is derived from power and efficiency rather than assumed independently,
-# so it can't imply an efficiency above 100%.
+# Thruster definitions. Chemical propulsion sets electrical power to 0.0 
+# to prevent NoneType evaluation errors in downstream physics equations.
 THRUSTERS = [
-    ("Chemical Bipropellant", 300, 0.95, None, "Chemical"),
+    ("Chemical Bipropellant", 300, 0.95, 0.0, "Chemical"),
     ("Hall Thruster", 1800, 0.50, 3000.0, "Electric"),
     ("Ion Thruster", 3000, 0.70, 5000.0, "Electric"),
-    ("Water Microwave Plasma", 1200, 0.45, 1500.0, "Electric"),  # Isp per Bellatrix's public 4x-chemical-Isp claim
+    ("Water Microwave Plasma", 1200, 0.45, 1500.0, "Electric"),
 ]
 
-CHEMICAL_THRUST_N = 500.0  # only used for the Chemical row's burn-time estimate
+CHEMICAL_THRUST_N = 500.0  
 
+THRUSTER_SHORT_NAMES = {
+    "Chemical Bipropellant": "Chemical",
+    "Hall Thruster": "Hall",
+    "Ion Thruster": "Ion",
+    "Water Microwave Plasma": "Water Plasma",
+}
+
+THRUSTER_COLORS = {
+    "Chemical Bipropellant": "#E63946",
+    "Hall Thruster": "#457B9D",
+    "Ion Thruster": "#2A9D8F",
+    "Water Microwave Plasma": "#F4A261",
+}
 
 def format_duration(seconds):
+    """
+    Translates raw seconds into UI-friendly chronological strings.
+    Strict modulo arithmetic (divmod) is used to prevent boundary rollover 
+    artifacts (e.g., 59.9 minutes rounding to '60m' instead of '1h').
+    """
     if seconds == float("inf"):
         return "N/A"
-    days = int(seconds // 86400)
-    remaining = seconds % 86400
-    hours = int(remaining // 3600)
-    remaining = remaining % 3600
-    minutes = int(round(remaining / 60))
+    
+    total_s = int(round(seconds))
+    days, remainder = divmod(total_s, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes = remainder // 60
+    
     if days > 0:
-        return f"{days}d {hours}h"
+        return f"~ {days}d {hours}h"
     elif hours > 0:
-        return f"{hours}h {minutes}m"
-    return f"{minutes}m"
+        return f"~ {hours}h {minutes}m"
+    return f"~ {minutes}m"
 
 
 @st.cache_data(ttl=3600)
-def load_tle():
-    """Fetch a fresh TLE at most once an hour; reuse the cached file otherwise."""
-    stale = os.path.exists(DATA_FILE) and (time.time() - os.path.getmtime(DATA_FILE)) > MAX_TLE_AGE_SECONDS
-    if not os.path.exists(DATA_FILE) or stale:
-        fetch_and_cache_tle()
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        lines = [line.strip() for line in f if line.strip()]
+def load_tle_web():
+    """
+    Retrieves TLE data from the upstream API directly into Streamlit memory.
+    Bypassing local disk I/O eliminates TOCTOU (Time-of-Check to Time-of-Use) 
+    race conditions under highly concurrent web traffic.
+    """
+    response = requests.get(URL, timeout=10)
+    response.raise_for_status()
+    lines = [line.strip() for line in response.text.splitlines() if line.strip()]
+    
+    if len(lines) < 3:
+        raise ValueError("Malformed TLE payload received from upstream.")
     return lines[0], lines[1], lines[2]
 
 
 @st.cache_resource
 def build_satellite(name, line1, line2):
+    """Initializes and caches the Skyfield propagation model."""
     ts = load.timescale()
     return ts, EarthSatellite(line1, line2, name, ts)
 
 
 def mission_delta_v(mission):
-    """Return (raise_dv_m_s, stationkeep_dv_m_s, deorbit_dv_m_s, total_m_s, r1, r2)."""
+    """Computes mission-specific Delta-V budget totals based on orbital parameters."""
     r1 = EARTH_RADIUS + mission["alt1"]
     r2 = EARTH_RADIUS + mission["alt2"]
     _, _, raise_dv_km_s = hohmann_transfer(r1, r2)
-
     sk_dv_km_s = station_keeping_delta_v(mission["annual_rate"], LIFETIME_YEARS)
-
-    r_deorbit = r2  # deorbits from wherever it ends up operating, not the starting altitude
-    r_perigee = EARTH_RADIUS + PERIGEE_ALT_KM
-    deorbit_dv_km_s = deorbit_delta_v(r_deorbit, r_perigee)
+    deorbit_dv_km_s = deorbit_delta_v(r2, EARTH_RADIUS + PERIGEE_ALT_KM)
 
     raise_m_s = raise_dv_km_s * 1000.0
     sk_m_s = sk_dv_km_s * 1000.0
@@ -114,140 +122,191 @@ def mission_delta_v(mission):
     return raise_m_s, sk_m_s, deorbit_m_s, raise_m_s + sk_m_s + deorbit_m_s, r1, r2
 
 
-# ---------------------------------------------------------------------
-# Load satellite once per session
-# ---------------------------------------------------------------------
+# --- UI Initialization ---
+st.title("🛰️ OrbitWatch")
+st.markdown("""
+Welcome to **OrbitWatch**. This dashboard bridges satellite telemetry tracking with systems engineering. 
+Use the tabs below to navigate through the modules:
+
+*   **🌎 Tracking:** Live position & ground track progression. We are currently tracking the **ISS (Zarya)**—the International Space Station's foundational module. It serves as our real-time orbital reference to visualize how a spacecraft's ground track shifts west over time due to Earth's rotation.
+*   **📡 Coverage:** Pass predictions and revisit rates. This module computes topocentric geometry to predict communication windows and acquisition opportunities over a specific designated ground station (**Mumbai, India**).
+*   **🚀 Delta-V & Propulsion:** A first-principles physics trade study. This module evaluates the **full operational lifecycle** of three distinct small-satellite missions. It calculates the cumulative $\Delta V$ budget required to **raise** the initial orbit, maintain **station-keeping** against atmospheric drag for a 5-year lifetime, and execute a destructive end-of-life **de-orbit** burn. It then compares the propellant and time costs to execute this full lifecycle across four different thruster technologies.
+""")
+
 try:
-    name, line1, line2 = load_tle()
+    name, line1, line2 = load_tle_web()
     ts, satellite = build_satellite(name, line1, line2)
     tle_error = None
-except Exception as exc:  # noqa: BLE001 - surfaced to the user below, not swallowed
+except Exception as exc: 
     name, line1, line2, ts, satellite = None, None, None, None, None
     tle_error = str(exc)
 
-st.title("OrbitWatch")
-st.caption("Tracking the ISS and modeling propulsion trade-offs for small satellite missions")
-
 if tle_error:
-    st.error(f"Couldn't load a TLE: {tle_error}")
+    st.error(f"Upstream API Error: {tle_error}")
     st.stop()
 
-tab_tracking, tab_coverage, tab_mission = st.tabs(["Tracking", "Coverage", "Delta-V & Propulsion"])
+tab_tracking, tab_coverage, tab_mission = st.tabs(["🌎 Tracking", "📡 Coverage", "🚀 Delta-V & Propulsion"])
 
 # ---------------------------------------------------------------------
 # Tab 1: Tracking
 # ---------------------------------------------------------------------
 with tab_tracking:
-    st.subheader(f"Live position: {name}")
-
+    st.markdown(f"### Live Telemetry: **{name}**")
+    
     pos_km, vel_km_s = propagate(line1, line2, name, ts.now())
     geo = satellite.at(ts.now())
     subpoint = geo.subpoint()
 
-    col_metrics, col_plot = st.columns([1, 2])
-    with col_metrics:
-        st.metric("Altitude", f"{subpoint.elevation.km:.1f} km")
-        st.metric("Speed", f"{(vel_km_s[0]**2 + vel_km_s[1]**2 + vel_km_s[2]**2) ** 0.5:.2f} km/s")
-        st.metric("Sub-satellite point", f"{subpoint.latitude.degrees:.1f}, {subpoint.longitude.degrees:.1f}")
-        orbits = st.slider("Orbits to show", 1, 4, 3)
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Altitude", f"{subpoint.elevation.km:.1f} km")
+    col2.metric("Orbital Velocity", f"{(vel_km_s[0]**2 + vel_km_s[1]**2 + vel_km_s[2]**2) ** 0.5:.2f} km/s")
+    col3.metric("Latitude", f"{subpoint.latitude.degrees:.2f}°")
+    col4.metric("Longitude", f"{subpoint.longitude.degrees:.2f}°")
+
+    st.divider()
+    
+    col_slide, col_plot = st.columns([1, 3])
+    with col_slide:
+        st.markdown("#### Orbit Projection")
+        st.write("Adjust to project the satellite's path forward in time. Notice how the ground track shifts west due to Earth's rotation.")
+        orbits = st.slider("Select Orbits to display:", 1, 4, 2)
 
     with col_plot:
         lats, lons = compute_ground_track(satellite, duration_minutes=93 * orbits)
-        fig, ax = plt.subplots(figsize=(9, 4.5))
-        ax.plot(lons, lats, color="crimson", linewidth=1.5)
+        
+        fig = Figure(figsize=(10, 5))
+        ax = fig.subplots()
+        
+        # Implement chronological colormap to visually distinguish overlapping ground tracks
+        time_prog = np.linspace(0, 1, len(lons))
+        scatter = ax.scatter(lons, lats, c=time_prog, cmap='coolwarm', s=8, alpha=0.9, zorder=2)
+        
+        # Mark initial epoch location
+        valid_idx = np.isfinite(lons).argmax()
+        ax.scatter(lons[valid_idx], lats[valid_idx], color='lime', s=90, edgecolors='black', zorder=5, label='Current Position')
+        
         ax.set_xlim([-180, 180])
         ax.set_ylim([-90, 90])
-        ax.set_xlabel("Longitude (deg)")
-        ax.set_ylabel("Latitude (deg)")
+        ax.set_xlabel("Longitude (°)")
+        ax.set_ylabel("Latitude (°)")
         ax.grid(True, linestyle="--", alpha=0.5)
-        ax.set_title(f"Ground track, next {orbits} orbit(s)")
+        ax.set_title(f"Ground Track Progression ({orbits} Orbit{'s' if orbits > 1 else ''})")
+        ax.legend(loc="lower left")
+        
         st.pyplot(fig)
-        st.caption(
-            "Simplified world outline (gridlines only), not a full map projection - "
-            "each successive orbit shifts west as Earth rotates underneath it."
-        )
 
 # ---------------------------------------------------------------------
 # Tab 2: Coverage
 # ---------------------------------------------------------------------
 with tab_coverage:
-    st.subheader("Passes over Mumbai")
-
+    st.markdown("### Ground Station Coverage: **Mumbai, India**")
+    st.write("Calculates visible passes over a designated target based on topocentric geometry.")
+    
     passes_24h = get_passes_over_location(satellite, MUMBAI_LAT, MUMBAI_LON, duration_days=1, horizon_degrees=10)
 
     if not passes_24h:
-        st.write("No passes above a 10 degree horizon in the next 24 hours.")
+        st.info("No passes above a 10-degree horizon in the next 24 hours.")
     else:
         rows = []
         for p in passes_24h:
             rows.append({
-                "Rise (UTC)": p["rise_time"].utc_strftime("%Y-%m-%d %H:%M"),
-                "Peak elevation": f"{p['max_elevation_deg']:.1f} deg",
-                "Set (UTC)": p["set_time"].utc_strftime("%Y-%m-%d %H:%M"),
+                "Rise Time (UTC)": p["rise_time"].utc_strftime("%Y-%m-%d %H:%M"),
+                "Peak Elevation": f"{p['max_elevation_deg']:.1f}°",
+                "Max Slant Range": f"{p.get('distance_km', 0):.0f} km",
+                "Set Time (UTC)": p["set_time"].utc_strftime("%Y-%m-%d %H:%M"),
                 "Duration": f"{p['duration_seconds'] / 60:.1f} min",
             })
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-    st.divider()
-    st.caption("7-day revisit metric")
     passes_7d = get_passes_over_location(satellite, MUMBAI_LAT, MUMBAI_LON, duration_days=7, horizon_degrees=10)
     if passes_7d:
         revisit_hours = (7.0 * 24.0) / len(passes_7d)
-        st.metric("Average revisit interval", f"{revisit_hours:.1f} hours", help=f"Based on {len(passes_7d)} passes over 7 days")
-    else:
-        st.write("No passes detected over the 7-day window.")
+        st.metric("7-Day Average Revisit Interval", f"{revisit_hours:.1f} hours", help=f"Based on {len(passes_7d)} passes")
 
 # ---------------------------------------------------------------------
-# Tab 3: Delta-V budget + propulsion trade study
+# Tab 3: Delta-V & Propulsion
 # ---------------------------------------------------------------------
 with tab_mission:
-    mission_label = st.selectbox("Mission scenario", list(MISSIONS.keys()))
+    st.markdown("### Mission Design & Propulsion Trade Study")
+    
+    mission_label = st.selectbox("Select a Mission Scenario:", list(MISSIONS.keys()))
     mission = MISSIONS[mission_label]
+    
+    st.info(f"**Mission Profile:** Initial Altitude **{mission['alt1']:.0f} km** ➔ Target Altitude **{mission['alt2']:.0f} km**")
 
     raise_m_s, sk_m_s, deorbit_m_s, total_m_s, r1, r2 = mission_delta_v(mission)
 
-    st.subheader("Delta-V budget")
+    st.markdown("#### Delta-V Budget Breakdown")
     col_a, col_b, col_c, col_d = st.columns(4)
-    col_a.metric("Raise/lower", f"{raise_m_s:.1f} m/s")
-    col_b.metric(f"Station-keep ({LIFETIME_YEARS:.0f} yr)", f"{sk_m_s:.1f} m/s")
-    col_c.metric("Deorbit", f"{deorbit_m_s:.1f} m/s")
-    col_d.metric("Total", f"{total_m_s:.0f} m/s")
+    col_a.metric("Transfer Burn", f"{raise_m_s:.1f} m/s")
+    col_b.metric(f"Drag Makeup ({LIFETIME_YEARS:.0f} yr)", f"{sk_m_s:.1f} m/s")
+    col_c.metric("End-of-Life Deorbit", f"{deorbit_m_s:.1f} m/s")
+    col_d.metric("Total Δv", f"{total_m_s:.0f} m/s")
 
     st.divider()
-    st.subheader("Propulsion trade study")
-    st.caption(f"Propellant mass and burn/transit time for this mission's {total_m_s:.0f} m/s budget, {M0_KG:.0f} kg wet mass")
+    
+    st.markdown("#### Thruster Comparison")
+    st.write(f"Calculating propellant requirements to deliver **{total_m_s:.0f} m/s** to a **{M0_KG:.0f} kg** spacecraft.")
 
     coast_s = hohmann_coast_time(r1, r2)
     rows = []
-    chart_data = {}
+    scatter_data = []
+    
     for tname, isp, eta, power, mode in THRUSTERS:
         v_e = exhaust_velocity(isp)
         mp = propellant_mass(total_m_s, isp, M0_KG)
+        
         if mode == "Electric":
             thrust = thrust_from_power(power, eta, v_e)
         else:
             thrust = CHEMICAL_THRUST_N
+            
         burn_s = transfer_time_estimate(total_m_s, thrust, M0_KG)
-        transit = f"Hohmann (~{format_duration(coast_s)})" if mode == "Chemical" else f"Spiral (~{format_duration(burn_s)})"
+        transit_s = coast_s if mode == "Chemical" else burn_s
+        transit = f"Hohmann ({format_duration(coast_s)})" if mode == "Chemical" else f"Spiral ({format_duration(burn_s)})"
 
         rows.append({
-            "Thruster": tname,
+            "Thruster Tech": tname,
             "Isp (s)": isp,
-            "Exhaust velocity": f"{v_e / 1000:.2f} km/s",
-            "Propellant mass": f"{mp:.1f} kg",
-            "Burn time": format_duration(burn_s),
-            "Transit": transit,
+            "Propellant Required": f"{mp:.1f} kg",
+            "Burn Time": format_duration(burn_s),
+            "Transfer Type": transit,
         })
-        chart_data[tname] = mp
+        scatter_data.append((tname, transit_s, mp))
 
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-    st.bar_chart(chart_data)
 
-    with st.expander("Why thrust is derived, not assumed"):
+    names = [THRUSTER_SHORT_NAMES.get(t, t) for t, _, _ in scatter_data]
+    masses = [mp for _, _, mp in scatter_data]
+    times_s = [ts for _, ts, _ in scatter_data]
+    colors = [THRUSTER_COLORS.get(t, "gray") for t, _, _ in scatter_data]
+
+    fig2 = Figure(figsize=(10, 4.5))
+    ax_mass, ax_time = fig2.subplots(1, 2)
+
+    bars_mass = ax_mass.bar(names, masses, color=colors)
+    ax_mass.bar_label(bars_mass, fmt="%.1f kg", padding=3, fontsize=9)
+    ax_mass.set_ylabel("Propellant Mass (kg)")
+    ax_mass.set_title("Propellant Cost")
+    ax_mass.margins(y=0.15)
+    ax_mass.grid(axis='y', linestyle='--', alpha=0.3)
+
+    bars_time = ax_time.bar(names, times_s, color=colors)
+    time_labels = [format_duration(ts) for ts in times_s]
+    ax_time.bar_label(bars_time, labels=time_labels, padding=3, fontsize=9)
+    ax_time.set_ylabel("Transit Duration")
+    ax_time.set_title("Time Cost")
+    ax_time.set_yticks([]) 
+    ax_time.margins(y=0.15)
+
+    fig2.tight_layout()
+    st.pyplot(fig2)
+
+    with st.expander("Physics Note: Deriving Thrust vs. Assuming It"):
         st.write(
-            "Each electric thruster's thrust comes from `thrust_from_power(power, eta, v_e)` "
-            "rather than being a separate, independently chosen number. That keeps thrust, "
-            "power, and efficiency mutually consistent: a thrust value picked without "
-            "checking it against power and efficiency can quietly ask for more kinetic "
-            "power out than electrical power in, which is physically impossible."
+            "Thrust parameters for Electric propulsion modes are derived dynamically via "
+            "`F = 2 * P * eta / v_e` rather than relying on assumed fixed values. "
+            "This architectural decision ensures energy conservation laws are respected; "
+            "arbitrarily pairing independent inputs for power, thrust, and specific impulse "
+            "frequently results in unphysical models demanding >100% electrical efficiency."
         )

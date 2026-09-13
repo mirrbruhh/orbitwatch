@@ -1,3 +1,8 @@
+"""
+Local utility for retrieving two-line element sets (TLEs).
+Intended for standalone CLI testing; web applications should handle API responses in-memory.
+"""
+
 import os
 import requests
 
@@ -7,24 +12,20 @@ FILE_PATH = os.path.join(DATA_DIR, "iss.txt")
 
 def fetch_and_cache_tle(url=URL, save_path=FILE_PATH):
     """
-    Fetch satellite two-line element set (TLE) from CelesTrak REST API
-    and cache locally with directory validation and timeouts.
+    Fetch satellite TLE from the CelesTrak REST API and cache locally.
+    Network requests include explicit timeouts to prevent process blocking 
+    during upstream API degradation.
     """
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
 
-        # Clean lines: strip whitespace and completely remove empty blank lines
+        # Sanitize payload: strip whitespace and filter out empty newlines
         clean_lines = [line.strip() for line in response.text.splitlines() if line.strip()]
 
-        # A real TLE is name + 2 lines, with line 1 starting "1 " and line 2
-        # starting "2 ". This catches CelesTrak returning an error page, an
-        # empty body, or a rate-limit notice with a 200 status.
+        # Basic validation against payload corruption or HTML rate-limit pages
         if len(clean_lines) < 3 or not clean_lines[1].startswith("1 ") or not clean_lines[2].startswith("2 "):
-            raise ValueError(
-                f"Response doesn't look like a valid TLE (got {len(clean_lines)} lines). "
-                f"Raw response started with: {response.text[:120]!r}"
-            )
+            raise ValueError("Upstream response failed TLE structure validation.")
 
         clean_text = "\n".join(clean_lines)
         
