@@ -37,6 +37,7 @@ While typical tracking applications conclude at geospatial plotting, OrbitWatch 
 *   **Memory Management:** Implements strict teardown procedures for Matplotlib state machines (`plt.close()`) to guarantee continuous uptime without Out-of-Memory (OOM) leaks.
 *   **Sequential Mass Bookkeeping:** Evaluates propellant budgets chronologically (Orbit Raise $\rightarrow$ Station-Keeping $\rightarrow$ Deorbit). As fuel is consumed, the spacecraft's dynamic dry mass is updated and passed to the next maneuver phase, ensuring highly accurate $m_0$ inputs for the Tsiolkovsky equation rather than naively applying the initial wet mass to all calculations.
 
+
 ## 🚀 Mission Trade Studies
 
 The engine evaluates three nominal systems-engineering profiles, calculating orbital raise/lower burns, lifetime drag-makeup (station-keeping), and end-of-life atmospheric disposal:
@@ -102,6 +103,7 @@ python plot_ground_track.py         # Renders multi-orbit chronological gradient
 *   **Continuous-Thrust Estimation:** `transfer_time_estimate` evaluates a constant-mass approximation. Actual low-thrust electric spirals incur gravity losses due to non-impulsive acceleration vectors, requiring integrated numerical simulation for exact mission durations.
 *   **Aerodynamic Modeling:** Drag penalties rely on conservative median values tailored to specific altitude bands, rather than real-time NRLMSISE-00 atmospheric density and variable ballistic coefficient integrations.
 *   **J2 Perturbations:** Two-body Keplerian mechanics are assumed for transfer energy budgets; nodal regression and secular variations are excluded from the baseline delta-v calculations.
+*   **Impulsive Burn Approximation (Gravity Losses):** The math engine currently assumes instantaneous (impulsive) burns. In physical operations, a chemical engine would not burn continuously for 28 minutes in LEO, as this spans ~30% of the orbit and incurs massive gravity losses. Real missions, such as **ISRO's Mangalyaan (Mars Orbiter Mission)**, mitigate this by segmenting the maneuver into multiple short 5-minute perigee bursts over several orbits. Electric propulsion `transfer_time_estimate` likewise uses a first-order constant-mass approximation rather than a full numerical spiral integration.
 
 ## 🔮 Future Extensions
 * **J2/J4 Perturbation Modeling:** Integrating nodal regression calculations for sun-synchronous orbit (SSO) mission profiles.
