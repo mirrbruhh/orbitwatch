@@ -6,14 +6,15 @@ analysis, and a first-principles propulsion trade study.
 Run locally with: streamlit run app.py
 """
 
-import requests
+import os
+
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 from matplotlib.figure import Figure
 from skyfield.api import EarthSatellite, load
 
+from fetch_tle import FILE_PATH, fetch_tle_lines
 from src.coverage import compute_ground_track, get_passes_over_location
 from src.deltav import (
     EARTH_RADIUS,
@@ -26,6 +27,7 @@ from src.missions import MISSIONS
 from src.propagate import propagate
 from src.propulsion import (
     exhaust_velocity,
+    format_duration,
     propellant_mass,
     thrust_from_power,
     transfer_time_estimate,
@@ -33,7 +35,6 @@ from src.propulsion import (
 
 st.set_page_config(page_title="OrbitWatch", page_icon="🛰️", layout="wide")
 
-URL = "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE"
 MUMBAI_LAT, MUMBAI_LON = 19.0760, 72.8777
 PERIGEE_ALT_KM = 150.0
 M0_KG = 1000.0
@@ -64,44 +65,24 @@ THRUSTER_COLORS = {
     "Water Microwave Plasma": "#F4A261",
 }
 
-def format_duration(seconds):
-    """
-    Translates raw seconds into UI-friendly chronological strings.
-    Strict modulo arithmetic (divmod) is used to prevent boundary rollover 
-    artifacts (e.g., 59.9 minutes rounding to '60m' instead of '1h').
-    """
-
-    if seconds == float("inf"):
-        return "N/A"
-    
-    if 0 < seconds < 60:
-        return "< 1m"  # Catches rapid chemical burns so they don't show as 0m
-        
-    total_s = int(round(seconds))
-    days, remainder = divmod(total_s, 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes = remainder // 60
-    
-    if days > 0:
-        return f"~ {days}d {hours}h"
-    elif hours > 0:
-        return f"~ {hours}h {minutes}m"
-    return f"~ {minutes}m"
-
 @st.cache_data(ttl=3600)
 def load_tle_web():
     """
-    Retrieves TLE data from the upstream API directly into Streamlit memory.
-    Bypassing local disk I/O eliminates TOCTOU (Time-of-Check to Time-of-Use) 
-    race conditions under highly concurrent web traffic.
+    Fetches a TLE via fetch_tle.fetch_tle_lines(), the same validated fetch
+    logic the standalone scripts use, so there is one implementation, not
+    two that can drift apart. If the live fetch fails (network outage,
+    CelesTrak rate limit), falls back to the last cached copy on disk
+    rather than taking the whole dashboard down.
     """
-    response = requests.get(URL, timeout=10)
-    response.raise_for_status()
-    lines = [line.strip() for line in response.text.splitlines() if line.strip()]
-    
-    if len(lines) < 3:
-        raise ValueError("Malformed TLE payload received from upstream.")
-    return lines[0], lines[1], lines[2]
+    try:
+        return fetch_tle_lines()
+    except Exception as live_exc:
+        if os.path.exists(FILE_PATH):
+            with open(FILE_PATH, "r", encoding="utf-8") as f:
+                lines = [line.strip() for line in f if line.strip()]
+            if len(lines) >= 3:
+                return lines[0], lines[1], lines[2]
+        raise live_exc
 
 
 @st.cache_resource
@@ -126,14 +107,14 @@ def mission_delta_v(mission):
 
 
 # --- UI Initialization ---
-st.title("🛰️ OrbitWatch")
-st.markdown("""
-Welcome to **OrbitWatch**. This dashboard bridges satellite telemetry tracking with systems engineering. 
+st.title("OrbitWatch")
+st.markdown(r"""
+Welcome to **OrbitWatch**. This dashboard bridges satellite telemetry tracking with systems engineering.
 Use the tabs below to navigate through the modules:
 
-*   **🌎 Tracking:** Live position & ground track progression. We are currently tracking the **ISS (Zarya)**—the International Space Station's foundational module. It serves as our real-time orbital reference to visualize how a spacecraft's ground track shifts west over time due to Earth's rotation.
-*   **📡 Coverage:** Pass predictions and revisit rates. This module computes topocentric geometry to predict communication windows and acquisition opportunities over a specific designated ground station (**Mumbai, India**).
-*   **🚀 Delta-V & Propulsion:** A first-principles physics trade study. This module evaluates the **full operational lifecycle** of three distinct small-satellite missions. It calculates the cumulative $\Delta V$ budget required to **raise** the initial orbit, maintain **station-keeping** against atmospheric drag for a 5-year lifetime, and execute a destructive end-of-life **de-orbit** burn. It then compares the propellant and time costs to execute this full lifecycle across four different thruster technologies.
+*   **Tracking:** Live position and ground track progression. Currently tracking the **ISS (Zarya)**, used as a real-time reference for how a spacecraft's ground track shifts west over time due to Earth's rotation.
+*   **Coverage:** Pass predictions and revisit rates. Computes topocentric geometry to predict communication windows and acquisition opportunities over a designated ground station (**Mumbai, India**).
+*   **Delta-V & Propulsion:** A first-principles physics trade study across three small-satellite missions. Calculates the cumulative $\Delta V$ budget to **raise** the initial orbit, maintain **station-keeping** against atmospheric drag for a 5-year lifetime, and execute a destructive end-of-life **deorbit** burn, then compares propellant and time cost across four thruster technologies.
 """)
 
 try:
@@ -148,7 +129,7 @@ if tle_error:
     st.error(f"Upstream API Error: {tle_error}")
     st.stop()
 
-tab_tracking, tab_coverage, tab_mission = st.tabs(["🌎 Tracking", "📡 Coverage", "🚀 Delta-V & Propulsion"])
+tab_tracking, tab_coverage, tab_mission = st.tabs(["Tracking", "Coverage", "Delta-V & Propulsion"])
 
 # ---------------------------------------------------------------------
 # Tab 1: Tracking
@@ -301,7 +282,7 @@ with tab_mission:
     # Combine table rows ordered by Phase
     breakdown_rows = phase1_rows + phase2_rows + phase3_rows
 
-    with st.expander("🔍 View Detailed Phase-by-Phase Breakdown", expanded=False):
+    with st.expander("View Detailed Phase-by-Phase Breakdown", expanded=False):
         
         # Phase 1 Table
         st.markdown("##### 1. Orbit Raise")
@@ -358,31 +339,31 @@ with tab_mission:
     
     # 1. Dynamic Mission-Specific Insight
     if "Mission A" in mission_label:
-        st.info(f"**Mission-Specific Insight ({mission_label}):** \nWith a modest total $\Delta V$ budget (~192 m/s), chemical propulsion is highly viable if rapid operational deployment is the priority. However, utilizing Electric propulsion saves ~50 kg of propellant—which for a 1000 kg smallsat can significantly increase the mass available for revenue-generating payloads (cameras, sensors, transponders).")
+        st.info(rf"**Mission-specific insight ({mission_label}):** With a modest total $\Delta V$ budget (~192 m/s), chemical propulsion is a reasonable choice if rapid deployment is the priority. Electric propulsion saves roughly 55 kg of propellant for this mission, meaningful for a 1000 kg smallsat but not the dramatic difference seen on the higher-delta-v missions.")
     
     elif "Mission B" in mission_label:
-        st.info(f"**Mission-Specific Insight ({mission_label}):** \nThis high-energy transfer (~841 m/s) severely punishes chemical propulsion, which consumes nearly 25% of the spacecraft's initial mass just for fuel. Electric propulsion (Ion/Hall) is heavily recommended here to preserve payload capacity, though the mission planners must tolerate a slow spiral transfer time of several weeks.")
+        st.info(f"**Mission-specific insight ({mission_label}):** This high-energy transfer (~841 m/s) is expensive for chemical propulsion, which consumes nearly 25% of the spacecraft's initial mass just for fuel. Electric propulsion (Ion/Hall) saves roughly 200 kg here, the largest absolute saving of the three missions, at the cost of a multi-week transfer instead of hours.")
     
     elif "Mission C" in mission_label:
-        st.info(f"**Mission-Specific Insight ({mission_label}):** \nLowering from a rideshare orbit to 500 km means the satellite will face a high atmospheric drag environment (~35 m/s over 5 years). Water Microwave Plasma presents a strong middle ground here: fast enough to reach operational altitude quickly, but efficient enough to sustain the 5-year drag makeup without eating up the mass budget.")
+        st.info(f"**Mission-specific insight ({mission_label}):** Lowering from a rideshare orbit to 500 km means facing a higher atmospheric drag environment (~35 m/s over 5 years) than Mission A's. Water microwave plasma is a reasonable middle ground here: faster to reach operational altitude than ion or Hall, while still needing far less propellant than chemical.")
 
     # 2. Combined Technology Summary
     st.success("""
-    **Combined Technology Summary (Applicable across all missions):**
-    * **Heaviest Payload Capacity (Mass Efficiency):** **Ion and Hall thrusters** require the least propellant. By saving hundreds of kilograms of fuel compared to chemical propulsion, that mass can be replaced with payload.
-    * **Fastest Operational Response (Time Cost):** **Chemical Bipropellant** is the only technology that executes orbital transfers in hours. Electric thrusters take weeks to spiral, delaying the start of the satellite's revenue-generating lifespan.
-    * **The Middle Ground:** **Microwave Plasma (Water) thrusters** offer a strong compromise, requiring vastly less mass than chemical rockets while using safe, non-toxic, easily storable propellants (water) compared to expensive Xenon gas used in Ion/Hall systems.
+    **Across all three missions:**
+    * **Mass efficiency:** Ion and Hall thrusters need the least propellant, saving anywhere from about 55 kg (Mission A) to about 220 kg (Mission B) versus chemical, depending on the mission's total delta-v. That mass can go to payload instead.
+    * **Time cost:** Chemical is the only technology that completes a transfer in hours rather than weeks; electric thrusters trade that speed for the propellant savings above.
+    * **The middle ground:** water microwave plasma needs meaningfully less propellant than chemical while using water rather than the more expensive xenon that ion and Hall thrusters require.
     """)
 
     # 3. Sources Expander
 
-    with st.expander("📚 Systems Engineering Assumptions & Sources"):
+    with st.expander("Systems Engineering Assumptions & Sources"):
         st.markdown("""
         **Where do these numbers come from?**
         * **Drag Profile:** Station-keeping estimates rely on the industry-standard *Space Mission Analysis and Design (SMAD)* text. E.g., 500 km altitudes incur a baseline penalty of ~7.0 m/s/year.
         * **Deorbit Perigee (150 km):** Satellites are modeled to lower their perigee to 150 km to ensure rapid, passive aerodynamic destruction in Earth's dense upper atmosphere.
         * **Bellatrix Microwave Plasma:** The 1200s Isp modeled here represents published performance targets by [Bellatrix Aerospace](https://bellatrix.aero/jal) for their water-based thrusters (roughly 4x the efficiency of chemical thrusters).
-        * **Electric Thrust Derivation:** Thrust is strictly derived from electrical power and specific impulse ($F = 2 P \eta / v_e$) to enforce energy conservation, preventing inputs that inadvertently assume >100% efficiency.
+        * **Electric thrust derivation:** thrust is derived from electrical power and specific impulse (F = 2P eta / v_e) rather than assumed independently, so it can't imply an efficiency above 100%.
         * **Gravity Losses:** The model assumes impulsive Delta-V. In physical operations, a chemical engine would not burn continuously for 28 minutes in LEO (which would incur massive gravity losses). Real missions, such as ISRO's Mangalyaan (MOM), segment these into multiple short 5-minute perigee bursts over several orbits to remain efficient.
         * **Chemical Station-Keeping (< 1m):** Chemical rockets produce massive thrust (500 N in this model). A 5-year drag makeup maneuver that takes an electric thruster 24 hours to achieve will take a chemical thruster roughly ~20 seconds of total firing time, hence appearing as '< 1m'.
         """)
