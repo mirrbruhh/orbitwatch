@@ -12,7 +12,7 @@ DATA_FILE = "data/iss.txt"
 MAX_TLE_AGE_SECONDS = 24 * 3600  
 
 if not os.path.exists(DATA_FILE) or (time.time() - os.path.getmtime(DATA_FILE)) > MAX_TLE_AGE_SECONDS:
-    print("Initiating upstream TLE synchronization...")
+    print("No cached TLE found (or it's stale). Downloading from CelesTrak...")
     fetch_and_cache_tle()
 
 with open(DATA_FILE, "r", encoding="utf-8") as f:

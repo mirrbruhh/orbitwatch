@@ -27,7 +27,7 @@ MISSIONS = {
         "alt2": 500.0,
         # Rationale: Operational altitude is 500 km. Standard industry reference 
         # (SMAD 4th Ed.) assigns a drag penalty of 5-10 m/s/yr. 
-        # 7.0 m/s/yr is utilized as the baseline median.
+        # 7.0 m/s/yr is used as a representative value within that range.
         "annual_rate": 7.0,
     },
 }

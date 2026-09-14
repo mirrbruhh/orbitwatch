@@ -9,6 +9,8 @@ ALT_PERIGEE = 150.0
 r_perigee = EARTH_RADIUS + ALT_PERIGEE
 
 DEORBIT_BOUNDS = {
+    # All three deorbit from alt2 in src/missions.py, i.e. wherever the
+    # mission actually ends up operating, not its starting altitude.
     "Mission A (Indian Smallsat)": (127.0, 110.0, 145.0),
     "Mission B (Ambitious High Raise)": (340.0, 300.0, 380.0),
     "Mission C (Rideshare Lowering)": (100.0, 80.0, 120.0),

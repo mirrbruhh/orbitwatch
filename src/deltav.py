@@ -1,5 +1,3 @@
-# Module 3: Mission Delta-V Scenarios
-
 import math
 
 # Constants
@@ -9,9 +7,10 @@ EARTH_RADIUS = 6378.0   # Earth mean equatorial radius (km)
 def vis_viva(r, a):
     """
     Compute orbital velocity using the vis-viva equation.
-    
-    Includes a domain guard to prevent ValueError exceptions during unphysical 
-    state inputs (e.g., hyperbolic anomalies or data corruption from the UI).
+
+    Raises a clear ValueError instead of computing nonsense (a negative
+    number under a square root) for hyperbolic or otherwise unphysical
+    combinations of r and a.
     """
     radicand = 2.0 / r - 1.0 / a
     if radicand < 0.0:

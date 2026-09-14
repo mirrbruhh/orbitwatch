@@ -20,7 +20,7 @@ needs_fetch = (
     or (time.time() - os.path.getmtime(DATA_FILE)) > MAX_TLE_AGE_SECONDS
 )
 if needs_fetch:
-    print("No valid cached TLE detected. Syncing with CelesTrak upstream...")
+    print("No cached TLE found (or it's stale). Downloading from CelesTrak...")
     fetch_and_cache_tle()
 
 with open(DATA_FILE, "r", encoding="utf-8") as f:

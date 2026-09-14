@@ -7,9 +7,11 @@ from src.missions import MISSIONS
 
 YEARS = 5.0
 SK_BOUNDS = {
+    # Reflects the 600 km operating altitude; see src/missions.py for the rate this is checked against.
     "Mission A (Indian Smallsat)": (10.0, 5.0, 15.0),
+    # Reflects the 0.1 m/s/yr conservative upper bound at 1500 km; see src/missions.py.
     "Mission B (Ambitious High Raise)": (0.5, 0.0, 0.5),
-    "Mission C (Rideshare Lowering)": (35.0, 20.0, 50.0), 
+    "Mission C (Rideshare Lowering)": (35.0, 20.0, 50.0),
 }
 
 print("\n" + "=" * 110)
