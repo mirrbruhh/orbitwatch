@@ -1,7 +1,9 @@
-# Module 4: Validate propulsion trade-study calculations across mission profiles
-# Now featuring sequential Mass Budget Bookkeeping.
+"""
+Validate propulsion trade-study calculations across mission profiles.
+Features sequential Mass Budget Bookkeeping.
+"""
 
-from src.propulsion import propellant_mass, transfer_time_estimate, exhaust_velocity, thrust_from_power
+from src.propulsion import propellant_mass, transfer_time_estimate, exhaust_velocity, thrust_from_power, format_duration
 from src.deltav import (
     hohmann_transfer,
     hohmann_coast_time,
@@ -10,25 +12,6 @@ from src.deltav import (
     EARTH_RADIUS,
 )
 from src.missions import MISSIONS
-
-def format_duration(seconds):
-    """Safely formats duration using strict modulo math."""
-    if seconds == float('inf'):
-        return "N/A"
-        
-    if 0 < seconds < 60:
-        return "< 1m"  # Catches rapid chemical burns so they don't show as 0m
-        
-    total_s = int(round(seconds))
-    days, remainder = divmod(total_s, 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes = remainder // 60
-    
-    if days > 0:
-        return f"{days}d {hours}h"
-    elif hours > 0:
-        return f"{hours}h {minutes}m"
-    return f"{minutes}m"
 
 # Systems Engineering Assumptions
 M0_KG = 1000.0  

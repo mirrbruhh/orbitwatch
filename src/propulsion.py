@@ -45,3 +45,27 @@ def transfer_time_estimate(delta_v_m_s, thrust_n, m0_kg):
         return float('inf')
     acceleration = thrust_n / m0_kg
     return delta_v_m_s / acceleration
+
+
+def format_duration(seconds):
+    """
+    Format a duration in seconds as a compact string (e.g. "~ 13d 1h").
+    Shared by app.py and validate_propulsion.py so both report the same
+    number the same way, rather than keeping two copies that can drift.
+    """
+    if seconds == float("inf"):
+        return "N/A"
+
+    if 0 < seconds < 60:
+        return "< 1m"  # catches rapid chemical burns so they don't show as 0m
+
+    total_s = int(round(seconds))
+    days, remainder = divmod(total_s, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes = remainder // 60
+
+    if days > 0:
+        return f"~ {days}d {hours}h"
+    elif hours > 0:
+        return f"~ {hours}h {minutes}m"
+    return f"~ {minutes}m"
