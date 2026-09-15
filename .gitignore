@@ -26,7 +26,7 @@ data/*.json
 *.swo
 
 # Streamlit local runtime (generated automatically)
-.streamlit/
+.streamlit/secrets.toml
 
 # Python package distribution files
 *.egg-info/
