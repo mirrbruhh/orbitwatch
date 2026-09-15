@@ -158,7 +158,8 @@ with tab_tracking:
         orbits = st.slider("Select Orbits to display:", 1, 4, 2)
 
     with col_plot:
-        lats, lons = compute_ground_track(satellite, duration_minutes=93 * orbits)
+        duration_mins = 93 * orbits
+        lats, lons = compute_ground_track(satellite, duration_minutes=duration_mins)
         
         fig = Figure(figsize=(10, 5))
         ax = fig.subplots()
@@ -179,8 +180,15 @@ with tab_tracking:
         ax.set_title(f"Ground Track Progression ({orbits} Orbit{'s' if orbits > 1 else ''})")
         ax.legend(loc="lower left")
         
-        st.pyplot(fig)
+        # --- NEW COLORBAR LOGIC ---
+        # Dynamically calculate the time labels based on the slider
+        cbar = fig.colorbar(scatter, ax=ax, fraction=0.02, pad=0.02)
+        cbar.set_label('Temporal Sequence')
+        cbar.set_ticks([0, 0.5, 1])
+        cbar.set_ticklabels(['T+0 (Now)', f'T+{duration_mins // 2}m', f'T+{duration_mins}m'])
+        # --------------------------
 
+        st.pyplot(fig, use_container_width=False)
 # ---------------------------------------------------------------------
 # Tab 2: Coverage
 # ---------------------------------------------------------------------
@@ -334,7 +342,7 @@ with tab_mission:
     ax_time.margins(y=0.15)
 
     fig2.tight_layout()
-    st.pyplot(fig2)
+    st.pyplot(fig2, use_container_width=False)
     
    # --- Executive Summary & Assumptions Section ---
     st.markdown("#### Executive Summary & Trade-Off Analysis")
