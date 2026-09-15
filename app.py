@@ -113,7 +113,9 @@ Welcome to **OrbitWatch**. This dashboard bridges satellite telemetry tracking w
 Use the tabs below to navigate through the modules:
 
 *   **Tracking:** Live position and ground track progression. Currently tracking the **ISS (Zarya)**, used as a real-time reference for how a spacecraft's ground track shifts west over time due to Earth's rotation.
+
 *   **Coverage:** Pass predictions and revisit rates. Computes topocentric geometry to predict communication windows and acquisition opportunities over a designated ground station (**Mumbai, India**).
+
 *   **Delta-V & Propulsion:** A first-principles physics trade study across three small-satellite missions. Calculates the cumulative $\Delta V$ budget to **raise** the initial orbit, maintain **station-keeping** against atmospheric drag for a 5-year lifetime, and execute a destructive end-of-life **deorbit** burn, then compares propellant and time cost across four thruster technologies.
 """)
 
@@ -358,12 +360,16 @@ with tab_mission:
     # 3. Sources Expander
 
     with st.expander("Systems Engineering Assumptions & Sources"):
-        st.markdown("""
+        st.markdown(r"""
         **Where do these numbers come from?**
         * **Drag Profile:** Station-keeping estimates rely on the industry-standard *Space Mission Analysis and Design (SMAD)* text. E.g., 500 km altitudes incur a baseline penalty of ~7.0 m/s/year.
         * **Deorbit Perigee (150 km):** Satellites are modeled to lower their perigee to 150 km to ensure rapid, passive aerodynamic destruction in Earth's dense upper atmosphere.
-        * **Bellatrix Microwave Plasma:** The 1200s Isp modeled here represents published performance targets by [Bellatrix Aerospace](https://bellatrix.aero/jal) for their water-based thrusters (roughly 4x the efficiency of chemical thrusters).
-        * **Electric thrust derivation:** thrust is derived from electrical power and specific impulse (F = 2P eta / v_e) rather than assumed independently, so it can't imply an efficiency above 100%.
-        * **Gravity Losses:** The model assumes impulsive Delta-V. In physical operations, a chemical engine would not burn continuously for 28 minutes in LEO (which would incur massive gravity losses). Real missions, such as ISRO's Mangalyaan (MOM), segment these into multiple short 5-minute perigee bursts over several orbits to remain efficient.
-        * **Chemical Station-Keeping (< 1m):** Chemical rockets produce massive thrust (500 N in this model). A 5-year drag makeup maneuver that takes an electric thruster 24 hours to achieve will take a chemical thruster roughly ~20 seconds of total firing time, hence appearing as '< 1m'.
+        * **Thruster Hardware Baselines:** 
+            * **Chemical (300s):** Representative of standard hypergolic apogee engines like **ISRO's Liquid Apogee Motor (LAM)** (famous for Chandrayaan and Mangalyaan) or the SpaceX Draco.
+            * **Hall Thruster (1800s):** Matches Stationary Plasma Thrusters (SPTs) like **ISRO's EPS flown on GSAT-9**, or commercial variants like the Safran PPS series.
+            * **Ion Thruster (3000s):** Represents ultra-efficient Gridded Ion Thrusters (GITs) like the **Boeing XIPS** or **NASA NSTAR**.
+            * **Microwave Plasma (1200s):** Represents published performance targets by India's **Bellatrix Aerospace (JAL series)** for water-based thrusters.
+        * **Electric thrust derivation:** Thrust is derived from electrical power and specific impulse ($F = 2P\eta / v_e$) rather than assumed independently, so it can't imply an efficiency above 100%.
+        * **Gravity Losses:** The model assumes impulsive $\Delta V$. Real missions segment these into multiple short perigee bursts over several orbits to avoid fighting gravity (precisely the strategy used by ISRO's LAM during the MOM mission).
+        * **Chemical Station-Keeping (< 1m):** Chemical rockets produce massive thrust (500 N in this model). A 5-year drag makeup maneuver taking an electric thruster 24 hours to achieve takes a chemical thruster roughly ~20 seconds of total firing time.
         """)

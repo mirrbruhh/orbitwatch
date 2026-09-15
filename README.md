@@ -34,6 +34,7 @@ _[Add a screenshot of the Delta-V & Propulsion tab here once deployed. The filen
 *   **In-memory TLE fetch for the web app:** the Streamlit app fetches a TLE directly into memory rather than round-tripping through a shared file on disk, avoiding a narrow race condition if two sessions request a fetch at the same moment. The standalone CLI scripts (`predict_passes.py`, `plot_ground_track.py`, `validate_propagation.py`) still cache to a file on disk between runs, which is a convenience for repeated command-line use, not a concurrency concern for them.
 *   **Matplotlib figures scoped per request:** the dashboard builds each chart via `matplotlib.figure.Figure()` directly rather than pyplot's global state, which is the pattern Streamlit's own docs recommend to avoid figures silently accumulating in memory across reruns.
 *   **Phase-by-phase mass bookkeeping:** propellant budgets are evaluated in sequence (raise, then station-keeping, then deorbit), with each phase's propellant mass subtracted before the next phase runs. The total propellant mass comes out identical to computing it in one step against the initial mass, since the rocket equation is exponential in delta-v either way, the real value here is the breakdown by phase, plus a small (roughly 0.3%) correction to total transit time from accounting for the spacecraft getting lighter between phases.
+*   **Hardware-Grounded Baselines:** Thruster performance metrics are anchored to real-world flight hardware. The trade study compares hypergolic bipropellant engines (e.g., **ISRO's Liquid Apogee Motor** / SpaceX Draco), commercial Hall Effect Thrusters (e.g., **ISRO GSAT-9 EPS** / Safran), Gridded Ion Thrusters (e.g., Boeing XIPS), and novel water microwave plasma engines (e.g., **Bellatrix Aerospace**).
 
 
 ## Mission trade studies
@@ -75,7 +76,7 @@ orbitwatch/
 Requirements: `Python 3.9+`
 
 ```bash
-git clone https://github.com/yourusername/orbitwatch.git
+git clone https://github.com/mirrbruhh/orbitwatch.git
 cd orbitwatch
 python3 -m venv venv
 source venv/bin/activate       # Windows: venv\Scripts\activate
