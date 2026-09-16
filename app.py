@@ -109,7 +109,7 @@ def mission_delta_v(mission):
 # --- UI Initialization ---
 st.title("OrbitWatch: Orbital Tracking and Propulsion Trade-Study Dashboard")
 st.markdown(r"""
- Welcome to **OrbitWatch**. This dashboard bridges satellite telemetry tracking with systems engineering.
+Welcome to **OrbitWatch**. This dashboard bridges satellite telemetry tracking with systems engineering.
 Use the tabs below to navigate through the modules:
 
 *   **Tracking:** Live position and ground track progression. Currently tracking the **ISS (Zarya)**, used as a real-time reference for how a spacecraft's ground track shifts west over time due to Earth's rotation.

@@ -4,19 +4,29 @@
 
 Most beginner satellite trackers stop at plotting a position on a map. OrbitWatch does that too, but its main focus is the delta-v budget behind three mission profiles (an orbit raise, a high-altitude raise, and a rideshare lowering) and a propulsion trade study comparing chemical, Hall-effect, ion, and water microwave plasma thrusters across all three.
 
-**Live Dashboard:** _[Insert your Streamlit Cloud URL here]_
+**Live Dashboard:** [orbit-watch-sim.streamlit.app](https://orbit-watch-sim.streamlit.app)
 
 ---
 
-### Dashboard previews
+### Dashboard Previews
 
-![Multi-Orbit Telemetry](assets/ground_track_multi_orbit.png)
-*(Above: the multi-orbit ground track, colored by time progression to show orbital drift.)*
+#### 1. Live Telemetry & Orbital Projection
+![Multi-Orbit Telemetry](assets/tracking_dashboard.png)
+*Vectorized multi-orbit ground track progression. The chronological color gradient visually demonstrates the satellite's westward longitudinal drift due to Earth's rotation.*
 
-_[Add a screenshot of the Delta-V & Propulsion tab here once deployed. The filename below (`propulsion_trade_study.png`) doesn't exist yet in `assets/`, generate or capture one and place it there, or remove this line.]_
+<br>
+
+#### 2. Sequential Mass Bookkeeping
+![Propulsion Tables](assets/propulsion_tables.png)
+*Phase-by-phase $\Delta V$ budget and propellant mass depletion. By dynamically updating the spacecraft's dry mass after each maneuver, the Tsiolkovsky equation yields highly accurate, sequential fuel constraints.*
+
+<br>
+
+#### 3. Propulsion Trade-Off Analysis
+![Propulsion Charts & Summary](assets/propulsion_charts.png)
+*Visual comparison of propellant cost versus active transit time across four thruster technologies, coupled with dynamic, mission-specific engineering insights to drive architectural decisions.*
 
 ---
-
 ## Tech stack
 * **Language:** Python 3.9+
 * **Orbital Mechanics:** [Skyfield](https://rhodesmill.org/skyfield/) (SGP4 propagation, topocentric geometry)
@@ -58,17 +68,21 @@ The engine evaluates three nominal systems-engineering profiles, calculating orb
 
 ```text
 orbitwatch/
-├── app.py                      # Main Streamlit web application
-├── fetch_tle.py                # Standalone CLI tool for CelesTrak API sync
-├── requirements.txt            # Python dependencies
+├── .streamlit/                 # Streamlit configuration (UI themes)
+├── assets/                     # Images and media for documentation
+├── data/                       # Local cache for TLE text files
 ├── src/                        # Core physics & logic modules
 │   ├── coverage.py             # Ground track & pass prediction math
 │   ├── deltav.py               # Vis-viva & orbital transfer kinematics
 │   ├── missions.py             # Centralized mission parameter configurations
 │   ├── propagate.py            # SGP4 state vector wrapper
 │   └── propulsion.py           # Tsiolkovsky & electrodynamic thrust engine
-├── validate_*.py               # Standalone engineering sanity-check scripts
-└── plot_ground_track.py        # Matplotlib renderer for multi-orbit telemetry
+├── app.py                      # Main Streamlit web application
+├── fetch_tle.py                # Standalone CLI tool for CelesTrak API sync
+├── plot_ground_track.py        # Matplotlib renderer for multi-orbit telemetry
+├── predict_passes.py           # CLI tool for ground station coverage
+├── requirements.txt            # Python dependencies
+└── validate_*.py               # Standalone engineering sanity-check scripts
 ```
 
 ## Local deployment
@@ -110,7 +124,7 @@ python plot_ground_track.py         # Renders multi-orbit chronological gradient
 * **Dynamic Atmospheric Density:** Replacing the conservative annual drag baseline with the `NRLMSISE-00` empirical atmosphere model for real-time solar flux integration.
 
 ## Connect
-* **LinkedIn:** [Mihir Satra](www.linkedin.com/in/mihir-satra-b8599b389)
+* **LinkedIn:** [Mihir Satra](https://www.linkedin.com/in/mihir-satra-b8599b389)
 
 If you're a recruiter, hiring manager, or fellow engineer interested in space systems, feel free to reach out!
 
