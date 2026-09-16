@@ -1,4 +1,4 @@
-# OrbitWatch
+# OrbitWatch: Orbital Tracking and Propulsion Trade-Study Dashboard
 
 **OrbitWatch** is a satellite tracking dashboard built around a specific question: for a small satellite in low Earth orbit, how much does the choice of propulsion system actually cost in propellant and in time?
 
