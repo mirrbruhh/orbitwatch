@@ -18,7 +18,7 @@ Most beginner satellite trackers stop at plotting a position on a map. OrbitWatc
 
 #### 2. Sequential Mass Bookkeeping
 ![Propulsion Tables](assets/propulsion_tables.png)
-*Phase-by-phase $\Delta V$ budget and propellant mass depletion. By dynamically updating the spacecraft's dry mass after each maneuver, the Tsiolkovsky equation yields highly accurate, sequential fuel constraints.*
+*Phase-by-phase ΔV budget and propellant mass depletion. By dynamically updating the spacecraft's dry mass after each maneuver, the Tsiolkovsky equation yields highly accurate, sequential fuel constraints.*
 
 <br>
 
