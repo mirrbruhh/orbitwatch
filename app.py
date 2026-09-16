@@ -107,7 +107,7 @@ def mission_delta_v(mission):
 
 
 # --- UI Initialization ---
-st.title("OrbitWatch: Orbital Tracking and Propulsion Trade-Study Dashboard")
+st.title("OrbitWatch: Orbital Propagation and Propulsion Trade-Study Dashboard")
 st.markdown(r"""
 Welcome to **OrbitWatch**. This dashboard bridges satellite telemetry tracking with systems engineering.
 Use the tabs below to navigate through the modules:
